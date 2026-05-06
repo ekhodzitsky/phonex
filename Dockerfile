@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for phonex
 # Supports linux/amd64 and linux/arm64
 
-ARG RUST_VERSION=1.82
+ARG RUST_VERSION=1.95
 ARG ONNXRUNTIME_VERSION=1.25.1
 ARG TARGETARCH
 
