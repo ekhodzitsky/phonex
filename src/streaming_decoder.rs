@@ -8,7 +8,7 @@ use crate::inference::decode::argmax_logit_with_confidence;
 use crate::tokenizer::Tokenizer;
 
 /// A single decoded token with timing and confidence.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct DecodeToken {
     pub id: u32,
     pub text: String,

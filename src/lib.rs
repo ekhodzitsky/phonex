@@ -19,6 +19,9 @@ pub mod streaming_pipeline;
 pub mod tokenizer;
 pub mod vad;
 
+#[cfg(feature = "ffi")]
+pub mod ffi;
+
 pub use error::{Result, SiamError};
 pub use inference::Engine;
 pub use streaming_decoder::DecodeToken;

@@ -25,6 +25,11 @@ pub struct Engine {
 impl Engine {
     /// Load an engine from a model directory (CLI convenience).
     pub fn load(model_dir: &str) -> crate::Result<Self> {
+        Self::load_with_pool_size(model_dir, 1)
+    }
+
+    /// Load an engine from a model directory with a custom pool size.
+    pub fn load_with_pool_size(model_dir: &str, pool_size: usize) -> crate::Result<Self> {
         let info = ModelInfo::from_model_dir(model_dir)?;
         let paths = crate::model_config::discover_model_files(model_dir)?;
         let tokenizer = Arc::new(Tokenizer::from_file(
@@ -32,8 +37,11 @@ impl Engine {
             paths.tokens.to_str().unwrap_or(""),
             info.blank_id,
         )?);
-        let triplet = SessionTriplet::from_model_dir(model_dir, &info)?;
-        let pool = SessionPool::new(vec![triplet]);
+        let mut triplets = Vec::with_capacity(pool_size);
+        for _ in 0..pool_size {
+            triplets.push(SessionTriplet::from_model_dir(model_dir, &info)?);
+        }
+        let pool = SessionPool::new(triplets);
         Ok(Self::new(pool, tokenizer, info))
     }
 
