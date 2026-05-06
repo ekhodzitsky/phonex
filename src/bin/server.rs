@@ -48,6 +48,8 @@ struct Args {
 
 #[derive(Clone, Debug, ValueEnum)]
 enum Language {
+    /// Cantonese (offline)
+    Cantonese,
     /// Chinese + English bilingual (offline)
     Chinese,
     /// English (offline, LibriSpeech)
@@ -67,6 +69,7 @@ enum Language {
 impl Language {
     fn model_dir(&self) -> &'static str {
         match self {
+            Language::Cantonese => "models/sherpa-onnx-zipformer-cantonese-2024-03-13",
             Language::Chinese => "models/sherpa-onnx-zipformer-zh-en-2023-11-22",
             Language::English => "models/sherpa-onnx-zipformer-en-2023-06-26",
             Language::Japanese => "models/sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01",

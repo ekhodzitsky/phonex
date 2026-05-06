@@ -50,6 +50,11 @@ pub const KNOWN_MODELS: &[ModelSpec] = &[
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-thai-2024-06-20.tar.bz2",
     },
     ModelSpec {
+        dir_name: "sherpa-onnx-zipformer-cantonese-2024-03-13",
+        archive_name: "sherpa-onnx-zipformer-cantonese-2024-03-13.tar.bz2",
+        url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-cantonese-2024-03-13.tar.bz2",
+    },
+    ModelSpec {
         dir_name: "sherpa-onnx-zipformer-zh-en-2023-11-22",
         archive_name: "sherpa-onnx-zipformer-zh-en-2023-11-22.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-zh-en-2023-11-22.tar.bz2",
