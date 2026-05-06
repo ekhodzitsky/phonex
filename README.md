@@ -157,6 +157,26 @@ Read more in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - [docs/FAQ.md](docs/FAQ.md) — Frequently asked questions
 - [docs/SECURITY.md](docs/SECURITY.md) — Authentication, CORS, rate limiting
 
+## 🔌 FFI / Embedded Use
+
+phonex can be embedded into Android, iOS, Python, or any C-compatible runtime via the `ffi` feature. No HTTP server, no JNI boilerplate — just a shared library and C headers.
+
+```bash
+cargo build --release --features ffi --no-default-features
+```
+
+### C API
+
+```c
+void* engine = phonex_engine_new("models/sherpa-onnx-zipformer-thai-2024-06-20");
+char* text = phonex_transcribe_file(engine, "audio.wav");
+printf("%s\n", text);
+phonex_string_free(text);
+phonex_engine_free(engine);
+```
+
+See [docs/FFI.md](docs/FFI.md) for full reference and Python examples.
+
 ## 🤝 Contributing
 
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
