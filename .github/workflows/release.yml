@@ -21,6 +21,15 @@ jobs:
       - name: Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
 
+      - name: Install ONNX Runtime (Ubuntu)
+        run: |
+          curl -fsSL https://github.com/microsoft/onnxruntime/releases/download/v1.25.1/onnxruntime-linux-x64-1.25.1.tgz -o onnxruntime.tgz
+          sudo tar -xzf onnxruntime.tgz -C /opt
+          sudo mv /opt/onnxruntime-linux-x64-1.25.1 /opt/onnxruntime
+          echo "ORT_LIB_PATH=/opt/onnxruntime/lib" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/opt/onnxruntime/lib" >> $GITHUB_ENV
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+
       - name: Verify package
         run: cargo publish --dry-run --allow-dirty
 
