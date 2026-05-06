@@ -1,5 +1,9 @@
 # phonex
 
+[![CI](https://github.com/ekhodzitsky/phonex/actions/workflows/ci.yml/badge.svg)](https://github.com/ekhodzitsky/phonex/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-1.93%2B-blue.svg)](https://www.rust-lang.org)
+
 > Generic on-device speech-to-text. Local inference, no cloud APIs, full privacy.
 
 ## Overview
@@ -50,6 +54,19 @@ The default model directory points to the Sherpa-ONNX Zipformer Thai model (Giga
 ### Known limitations
 - Streaming requires a streaming Zipformer model. Only English has one in Sherpa-ONNX today.
 - CoreML EP is ~6× slower than CPU for the streaming encoder (measured on M-series). CPU is recommended for streaming.
+
+## Why phonex?
+
+| | phonex | [whisper.cpp](https://github.com/ggerganov/whisper.cpp) | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) Python |
+|---|--------|----------|--------------|
+| **Streaming** | ✅ Native | ❌ No | ✅ Yes |
+| **Model size** | ~78–148 MB | ~150 MB–3 GB | ~78–148 MB |
+| **Languages** | Any Sherpa-ONNX Zipformer | Whisper-only | Any Sherpa-ONNX |
+| **Runtime** | Rust + ONNX Runtime | C++ | C++ + Python bindings |
+| **Server** | Built-in REST + WebSocket | Separate | Separate |
+| **Self-contained** | ✅ Single binary | ✅ Single binary | ❌ Python env |
+
+**phonex** sits between whisper.cpp and sherpa-onnx: it gives you whisper.cpp's deployment simplicity (single Rust binary, no Python) with sherpa-onnx's model ecosystem and native streaming support.
 
 ## Model files
 
@@ -122,6 +139,38 @@ cargo build --release --features coreml
 ```
 
 > **Note:** CoreML support is experimental. For the Sherpa-ONNX Zipformer Thai INT8 model, CPU inference is currently faster (~70-80ms/request) than CoreML (~140-170ms/request) on M1 Pro. Your mileage may vary with other models.
+
+## Installation
+
+### From source (recommended)
+
+```bash
+git clone https://github.com/ekhodzitsky/phonex.git
+cd phonex
+
+# macOS: install ONNX Runtime first
+brew install onnxruntime
+export ORT_PREFER_DYNAMIC_LINK=1
+export ORT_LIB_PATH=$(brew --prefix onnxruntime)/lib
+export DYLD_LIBRARY_PATH=$ORT_LIB_PATH
+
+# Linux: see Dockerfile for ONNX Runtime setup
+
+cargo build --release
+
+# Binaries will be in target/release/
+# - phonex      (main CLI)
+# - server      (HTTP/WebSocket server)
+# - streaming   (real-time streaming CLI)
+```
+
+### Docker
+
+```bash
+docker run -p 8080:8080 -v ./models:/app/models ghcr.io/ekhodzitsky/phonex:latest
+```
+
+> **Note:** Pre-built binaries and crates.io publishing coming soon. Track progress in [Roadmap](#roadmap).
 
 ## Quick Start
 
@@ -348,6 +397,36 @@ cargo test --test server
 cargo fmt
 cargo clippy
 ```
+
+## FAQ
+
+**Q: Why not just use Whisper / whisper.cpp?**
+A: Whisper models are 150 MB–3 GB and don't support native streaming (you have to buffer the entire audio). phonex uses Zipformer-transducer models (~78 MB for English streaming) with native chunk-by-chunk inference — ~500ms latency vs Whisper's multi-second latency.
+
+**Q: Can I use my own model?**
+A: Yes. Drop any Sherpa-ONNX Zipformer encoder-decoder-joiner model into a directory and point `--model-dir` at it. phonex auto-detects all parameters from ONNX metadata.
+
+**Q: Does it run on Raspberry Pi / embedded?**
+A: Should work on any Linux ARM64 with ONNX Runtime. Not yet tested on Raspberry Pi — if you try it, open an issue with results.
+
+**Q: Will Thai streaming work soon?**
+A: phonex is ready — we just need Sherpa-ONNX to release a Thai streaming Zipformer model. When they do, it will work with zero code changes.
+
+**Q: How does phonex compare to running sherpa-onnx Python?**
+A: phonex is a single static binary with no Python environment. Easier to deploy, harder to break, lower memory overhead. Feature parity for inference; phonex adds built-in REST/WebSocket server.
+
+## Roadmap
+
+- [ ] Pre-built binaries for macOS ARM64 and Linux x64
+- [ ] Publish to crates.io
+- [ ] CUDA execution provider support
+- [ ] gRPC API
+- [ ] OpenAPI spec + Swagger UI
+- [ ] Distributed tracing (OpenTelemetry)
+- [ ] Model hot-swap without restart
+- [ ] Thai streaming (blocked by upstream model availability)
+- [ ] Raspberry Pi / embedded ARM32 support
+- [ ] Real-time microphone input example
 
 ## License
 
