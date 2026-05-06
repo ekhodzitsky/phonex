@@ -4,13 +4,8 @@ use ndarray::{Array2, Array3};
 
 use crate::decoder::SherpaDecoder;
 use crate::joiner::SherpaJoiner;
+use crate::inference::decode::argmax_logit_with_confidence;
 use crate::tokenizer::Tokenizer;
-
-/// Maximum tokens emitted for a single encoder frame before forced blank.
-const MAX_TOKENS_PER_STEP: usize = 20;
-
-/// Frame shift in seconds for kaldi-native-fbank (10 ms).
-const FRAME_SHIFT_S: f64 = 0.01;
 
 /// A single decoded token with timing and confidence.
 #[derive(Debug, Clone)]
@@ -69,7 +64,7 @@ impl<'a> StreamingGreedyDecoder<'a> {
 
             let mut tokens_this_step = 0;
             loop {
-                if tokens_this_step >= MAX_TOKENS_PER_STEP {
+                if tokens_this_step >= crate::inference::MAX_TOKENS_PER_STEP {
                     break;
                 }
 
@@ -86,19 +81,19 @@ impl<'a> StreamingGreedyDecoder<'a> {
                 }
                 self.context[[0, self.context_size - 1]] = pred_id as i64;
 
-                let abs_t = self.global_time_offset + t as f64 * FRAME_SHIFT_S;
+                let abs_t = self.global_time_offset + t as f64 * crate::inference::FRAME_SHIFT_S;
                 new_tokens.push(DecodeToken {
                     id: pred_id,
                     text: String::new(),
                     start: abs_t,
-                    end: abs_t + FRAME_SHIFT_S,
+                    end: abs_t + crate::inference::FRAME_SHIFT_S,
                     confidence,
                 });
                 tokens_this_step += 1;
             }
         }
 
-        self.global_time_offset += time as f64 * FRAME_SHIFT_S;
+        self.global_time_offset += time as f64 * crate::inference::FRAME_SHIFT_S;
 
         // Fill token texts
         for token in &mut new_tokens {
@@ -126,26 +121,4 @@ impl<'a> StreamingGreedyDecoder<'a> {
     }
 }
 
-/// Argmax over logits [batch, vocab_size], returning the predicted token id and softmax confidence.
-fn argmax_logit_with_confidence(logits: &Array2<f32>, blank_id: u32) -> (u32, f32) {
-    let view = logits.index_axis(ndarray::Axis(0), 0);
-    let slice: Vec<f32> = view.iter().copied().collect();
 
-    let max_logit = slice.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    let exp_sum: f32 = slice.iter().map(|&x| (x - max_logit).exp()).sum();
-
-    let (idx, max_val) = slice
-        .iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.total_cmp(b))
-        .map(|(idx, &val)| (idx, val))
-        .unwrap_or((blank_id as usize, 0.0));
-
-    let confidence = if exp_sum > 0.0 {
-        (max_val - max_logit).exp() / exp_sum
-    } else {
-        1.0
-    };
-
-    (idx as u32, confidence)
-}

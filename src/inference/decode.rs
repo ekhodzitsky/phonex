@@ -5,12 +5,6 @@ use crate::decoder::SherpaDecoder;
 use crate::joiner::SherpaJoiner;
 use crate::tokenizer::Tokenizer;
 
-/// Maximum tokens emitted for a single encoder frame before forced blank.
-const MAX_TOKENS_PER_STEP: usize = 20;
-
-/// Frame shift in seconds for kaldi-native-fbank (10 ms).
-const FRAME_SHIFT_S: f64 = 0.01;
-
 /// A single decoded token with timing and confidence.
 #[derive(Debug, Clone)]
 pub struct DecodeToken {
@@ -84,7 +78,7 @@ impl<'a> GreedyDecoder<'a> {
         sample_idx: usize,
         max_t: usize,
     ) -> crate::Result<(String, Vec<DecodeToken>)> {
-        let mut context = Array2::from_elem((1, self.context_size), self.blank_id as i64);
+        let mut context = Array2::from_elem((1, self.context_size), i64::from(self.blank_id));
         let mut tokens: Vec<DecodeToken> = Vec::new();
 
         for t in 0..max_t {
@@ -95,7 +89,7 @@ impl<'a> GreedyDecoder<'a> {
 
             let mut tokens_this_step = 0;
             loop {
-                if tokens_this_step >= MAX_TOKENS_PER_STEP {
+                if tokens_this_step >= super::MAX_TOKENS_PER_STEP {
                     break;
                 }
 
@@ -110,13 +104,13 @@ impl<'a> GreedyDecoder<'a> {
                 for i in 0..(self.context_size - 1) {
                     context[[0, i]] = context[[0, i + 1]];
                 }
-                context[[0, self.context_size - 1]] = pred_id as i64;
+                context[[0, self.context_size - 1]] = i64::from(pred_id);
 
                 tokens.push(DecodeToken {
                     id: pred_id,
                     text: String::new(),
-                    start: t as f64 * FRAME_SHIFT_S,
-                    end: (t + 1) as f64 * FRAME_SHIFT_S,
+                    start: t as f64 * super::FRAME_SHIFT_S,
+                    end: (t + 1) as f64 * super::FRAME_SHIFT_S,
                     confidence,
                 });
                 tokens_this_step += 1;
@@ -134,7 +128,7 @@ impl<'a> GreedyDecoder<'a> {
             tokens[i].end = tokens[i + 1].start;
         }
         if let Some(last) = tokens.last_mut() {
-            last.end = max_t as f64 * FRAME_SHIFT_S;
+            last.end = max_t as f64 * super::FRAME_SHIFT_S;
         }
 
         Ok((text, tokens))
@@ -142,7 +136,7 @@ impl<'a> GreedyDecoder<'a> {
 }
 
 /// Argmax over logits [batch, vocab_size], returning the predicted token id and softmax confidence.
-fn argmax_logit_with_confidence(logits: &Array2<f32>, blank_id: u32) -> (u32, f32) {
+pub fn argmax_logit_with_confidence(logits: &Array2<f32>, blank_id: u32) -> (u32, f32) {
     let view = logits.index_axis(Axis(0), 0);
     let slice: Vec<f32> = view.iter().copied().collect();
 
@@ -153,8 +147,7 @@ fn argmax_logit_with_confidence(logits: &Array2<f32>, blank_id: u32) -> (u32, f3
         .iter()
         .enumerate()
         .max_by(|(_, a), (_, b)| a.total_cmp(b))
-        .map(|(idx, &val)| (idx, val))
-        .unwrap_or((blank_id as usize, 0.0));
+        .map_or((blank_id as usize, 0.0), |(idx, &val)| (idx, val));
 
     let confidence = if exp_sum > 0.0 {
         (max_val - max_logit).exp() / exp_sum

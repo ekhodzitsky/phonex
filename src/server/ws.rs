@@ -61,18 +61,7 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
         }
     };
 
-    // Send ready message.
-    let ready = ServerMessage::Ready {
-        model: state.model_info.model_id.clone(),
-        sample_rate: crate::inference::TARGET_SAMPLE_RATE,
-        version: env!("CARGO_PKG_VERSION").into(),
-        supported_rates: crate::server::SUPPORTED_RATES.to_vec(),
-    };
-    if socket
-        .send(Message::Text(serde_json::to_string(&ready).unwrap().into()))
-        .await
-        .is_err()
-    {
+    if send_ready_message(&mut socket, &state).await.is_err() {
         return;
     }
 
@@ -94,7 +83,7 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
             socket.next(),
         ).await {
             Ok(Some(Ok(msg))) => msg,
-            Ok(Some(Err(_))) | Ok(None) => break,
+            Ok(Some(Err(_)) | None) => break,
             Err(_) => break,
         };
 
@@ -236,10 +225,7 @@ async fn flush_and_send_final(socket: &mut WebSocket, pipeline: &mut crate::stre
 }
 
 fn bytes_to_f32_samples(data: &[u8]) -> Result<Vec<f32>, &'static str> {
-    let samples: Vec<f32> = data
-        .chunks_exact(4)
-        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
-        .collect();
+    let samples = crate::inference::audio::bytes_to_f32_samples(data);
     if samples.iter().any(|s| !s.is_finite()) {
         return Err("invalid_audio_samples");
     }
@@ -256,18 +242,7 @@ pub async fn ws_handler(
 }
 
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
-    // Send ready message
-    let ready = ServerMessage::Ready {
-        model: state.model_info.model_id.clone(),
-        sample_rate: crate::inference::TARGET_SAMPLE_RATE,
-        version: env!("CARGO_PKG_VERSION").into(),
-        supported_rates: crate::server::SUPPORTED_RATES.to_vec(),
-    };
-    if socket
-        .send(Message::Text(serde_json::to_string(&ready).unwrap().into()))
-        .await
-        .is_err()
-    {
+    if send_ready_message(&mut socket, &state).await.is_err() {
         return;
     }
 
@@ -304,7 +279,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
             socket.next(),
         ).await {
             Ok(Some(Ok(msg))) => msg,
-            Ok(Some(Err(_))) | Ok(None) => break,
+            Ok(Some(Err(_)) | None) => break,
             Err(_) => break,
         };
 
@@ -466,6 +441,21 @@ async fn checkout_triplet(
         Ok(Err(_)) => Err(()),
         Err(_) => Err(()),
     }
+}
+
+async fn send_ready_message(
+    socket: &mut WebSocket,
+    state: &Arc<AppState>,
+) -> Result<(), axum::Error> {
+    let ready = ServerMessage::Ready {
+        model: state.model_info.model_id.clone(),
+        sample_rate: crate::inference::TARGET_SAMPLE_RATE,
+        version: env!("CARGO_PKG_VERSION").into(),
+        supported_rates: crate::server::SUPPORTED_RATES.to_vec(),
+    };
+    socket
+        .send(Message::Text(serde_json::to_string(&ready).unwrap().into()))
+        .await
 }
 
 async fn send_error(

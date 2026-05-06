@@ -67,7 +67,7 @@ impl AudioPreprocessor {
             let frac = src_idx - src_idx.floor();
             let s0 = samples.get(src_idx_floor).copied().unwrap_or(0.0);
             let s1 = samples.get(src_idx_floor + 1).copied().unwrap_or(s0);
-            out.push(s0 + frac * (s1 - s0));
+            out.push(frac.mul_add(s1 - s0, s0));
         }
         out
     }
@@ -89,7 +89,7 @@ impl AudioPreprocessor {
         }
         out.push(samples[0]);
         for i in 1..samples.len() {
-            out.push(samples[i] - self.preemph * samples[i - 1]);
+            out.push((-self.preemph).mul_add(samples[i - 1], samples[i]));
         }
         out
     }
@@ -141,7 +141,7 @@ impl AudioPreprocessor {
         let mut reader = hound::WavReader::open(path).map_err(|e| {
             crate::SiamError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("WAV read error: {}", e),
+                format!("WAV read error: {e}"),
             ))
         })?;
         let spec = reader.spec();
@@ -175,7 +175,10 @@ impl AudioPreprocessor {
 
 fn hann_window(size: usize) -> Array1<f32> {
     Array1::from_iter((0..size).map(|i| {
-        0.5 - 0.5 * (2.0 * std::f32::consts::PI * i as f32 / (size - 1) as f32).cos()
+        (-0.5f32).mul_add(
+            (2.0 * std::f32::consts::PI * i as f32 / (size - 1) as f32).cos(),
+            0.5,
+        )
     }))
 }
 

@@ -2,6 +2,14 @@
 
 use crate::error::SiamError;
 
+use rubato::audioadapter_buffers::direct::InterleavedSlice;
+use rubato::{
+    Async, FixedAsync, Indexing, Resampler, SincInterpolationParameters, SincInterpolationType,
+    WindowFunction, calculate_cutoff,
+};
+
+const CHUNK_SAMPLES: usize = 16000 * 5;
+
 /// High-quality polyphase FIR resampler (rubato 2.0 Async sinc).
 pub fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>, SiamError> {
     if samples.is_empty() || from_rate == 0 || to_rate == 0 {
@@ -13,15 +21,8 @@ pub fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32
 
     let samples: Vec<f32> = samples.iter().map(|&s| if s.is_finite() { s } else { 0.0 }).collect();
 
-    use rubato::audioadapter_buffers::direct::InterleavedSlice;
-    use rubato::{
-        Async, FixedAsync, Indexing, Resampler, SincInterpolationParameters, SincInterpolationType,
-        WindowFunction, calculate_cutoff,
-    };
-
-    let ratio = to_rate as f64 / from_rate as f64;
+    let ratio = f64::from(to_rate) / f64::from(from_rate);
     let channels = 1;
-    const CHUNK_SAMPLES: usize = 16000 * 5;
     let chunk_size = samples.len().min(CHUNK_SAMPLES);
 
     let sinc_len = 128;
@@ -79,6 +80,13 @@ pub fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32
     Ok(outdata.into_iter().skip(delay * channels).take(expected_out * channels).collect())
 }
 
+/// Convert a little-endian byte slice to a Vec<f32>.
+pub fn bytes_to_f32_samples(data: &[u8]) -> Vec<f32> {
+    data.chunks_exact(4)
+        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect()
+}
+
 /// Decode an audio file (wav, mp3, ogg, flac, aac, etc.) to mono f32 samples at any sample rate.
 /// Returns `(samples, sample_rate)`.
 pub fn decode_audio(data: &[u8]) -> Result<(Vec<f32>, u32), SiamError> {
@@ -86,11 +94,11 @@ pub fn decode_audio(data: &[u8]) -> Result<(Vec<f32>, u32), SiamError> {
     use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
     use symphonia::core::errors::Error as SymphoniaError;
     use symphonia::core::formats::FormatOptions;
-    use symphonia::core::io::MediaSourceStream;
+    use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
     use symphonia::core::meta::MetadataOptions;
     use symphonia::core::probe::Hint;
 
-    let mss = MediaSourceStream::new(Box::new(std::io::Cursor::new(data.to_vec())), Default::default());
+    let mss = MediaSourceStream::new(Box::new(std::io::Cursor::new(data.to_vec())), MediaSourceStreamOptions::default());
     let hint = Hint::new();
     let format_opts = FormatOptions::default();
     let metadata_opts = MetadataOptions::default();
@@ -111,7 +119,7 @@ pub fn decode_audio(data: &[u8]) -> Result<(Vec<f32>, u32), SiamError> {
 
     let track_id = track.id;
     let sample_rate = track.codec_params.sample_rate.unwrap_or(0);
-    let channels = track.codec_params.channels.map(|c| c.count()).unwrap_or(1);
+    let channels = track.codec_params.channels.map_or(1, |c| c.count());
 
     let mut decoder = symphonia::default::get_codecs()
         .make(&track.codec_params, &decoder_opts)
@@ -133,14 +141,14 @@ pub fn decode_audio(data: &[u8]) -> Result<(Vec<f32>, u32), SiamError> {
         }
 
         match decoder.decode(&packet) {
-            Ok(decoded) => {
+            Ok(frame_buf) => {
                 if sample_buf.is_none() {
-                    let spec = *decoded.spec();
-                    let duration = decoded.capacity() as u64;
+                    let spec = *frame_buf.spec();
+                    let duration = frame_buf.capacity() as u64;
                     sample_buf = Some(SampleBuffer::<f32>::new(duration, spec));
                 }
                 if let Some(ref mut buf) = sample_buf {
-                    buf.copy_interleaved_ref(decoded);
+                    buf.copy_interleaved_ref(frame_buf);
                     let samples = buf.samples();
                     if channels > 1 {
                         // Convert interleaved stereo to mono
@@ -153,8 +161,7 @@ pub fn decode_audio(data: &[u8]) -> Result<(Vec<f32>, u32), SiamError> {
                 }
             }
             Err(SymphoniaError::IoError(ref e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-            Err(SymphoniaError::DecodeError(_)) => continue,
-            Err(SymphoniaError::ResetRequired) => continue,
+            Err(SymphoniaError::DecodeError(_)) | Err(SymphoniaError::ResetRequired) => continue,
             Err(e) => return Err(SiamError::Audio(format!("Decode error: {e}"))),
         }
     }

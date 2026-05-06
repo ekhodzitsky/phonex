@@ -4,6 +4,14 @@ use phonex::model_config::ModelInfo;
 const MODEL_DIR: &str = "models/sherpa-onnx-zipformer-thai-2024-06-20";
 const STREAMING_EN_DIR: &str = "models/sherpa-onnx-streaming-zipformer-en-2023-06-21";
 
+fn maybe_resample(samples: Vec<f32>, sample_rate: usize, target_rate: usize) -> Vec<f32> {
+    if sample_rate == target_rate {
+        samples
+    } else {
+        phonex::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)
+    }
+}
+
 #[test]
 fn test_transcribe_0_wav() {
     let engine = Engine::load(MODEL_DIR).expect("failed to load engine");
@@ -38,16 +46,8 @@ fn test_transcribe_batch() {
     let (samples0, sr0) = phonex::audio::AudioPreprocessor::read_wav(&format!("{}/test_wavs/0.wav", MODEL_DIR)).unwrap();
     let (samples1, sr1) = phonex::audio::AudioPreprocessor::read_wav(&format!("{}/test_wavs/1.wav", MODEL_DIR)).unwrap();
 
-    let samples0 = if sr0 != engine.info.sample_rate as usize {
-        phonex::audio::AudioPreprocessor::typhoon().resample(&samples0, sr0)
-    } else {
-        samples0
-    };
-    let samples1 = if sr1 != engine.info.sample_rate as usize {
-        phonex::audio::AudioPreprocessor::typhoon().resample(&samples1, sr1)
-    } else {
-        samples1
-    };
+    let samples0 = maybe_resample(samples0, sr0, engine.info.sample_rate as usize);
+    let samples1 = maybe_resample(samples1, sr1, engine.info.sample_rate as usize);
 
     let mut guard = engine.pool.try_checkout().expect("pool empty");
     let results = engine.transcribe_batch(vec![&samples0, &samples1], &mut guard)
@@ -64,11 +64,7 @@ fn test_transcribe_batch() {
 fn test_transcribe_vad_2_wav() {
     let engine = Engine::load(MODEL_DIR).expect("failed to load engine");
     let (samples, sample_rate) = phonex::audio::AudioPreprocessor::read_wav(&format!("{}/test_wavs/2.wav", MODEL_DIR)).unwrap();
-    let samples = if sample_rate != engine.info.sample_rate as usize {
-        phonex::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)
-    } else {
-        samples
-    };
+    let samples = maybe_resample(samples, sample_rate, engine.info.sample_rate as usize);
     let mut guard = engine.pool.try_checkout()
         .expect("pool empty");
     let result = engine.transcribe_samples_with_vad(&samples, &mut guard)
@@ -86,11 +82,7 @@ fn test_streaming_en_pipeline() {
         .expect("failed to create streaming pipeline");
 
     let (samples, sample_rate) = phonex::audio::AudioPreprocessor::read_wav(&format!("{}/test_wavs/0.wav", STREAMING_EN_DIR)).unwrap();
-    let samples = if sample_rate != info.sample_rate as usize {
-        phonex::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)
-    } else {
-        samples
-    };
+    let samples = maybe_resample(samples, sample_rate, info.sample_rate as usize);
 
     // Feed in 0.5-second chunks
     let chunk_samples = 8000;
@@ -130,11 +122,7 @@ fn test_streaming_en_1_wav() {
         .expect("failed to create streaming pipeline");
 
     let (samples, sample_rate) = phonex::audio::AudioPreprocessor::read_wav(&format!("{}/test_wavs/1.wav", STREAMING_EN_DIR)).unwrap();
-    let samples = if sample_rate != info.sample_rate as usize {
-        phonex::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)
-    } else {
-        samples
-    };
+    let samples = maybe_resample(samples, sample_rate, info.sample_rate as usize);
 
     let text = streaming_transcribe(&mut pipeline, &samples, 8000);
     println!("Streaming 1.wav result: '{}'", text);
@@ -162,11 +150,7 @@ fn test_streaming_en_8k_wav() {
 fn test_streaming_different_chunk_sizes() {
     let info = ModelInfo::from_model_dir(STREAMING_EN_DIR).expect("failed to load model info");
     let (samples, sample_rate) = phonex::audio::AudioPreprocessor::read_wav(&format!("{}/test_wavs/0.wav", STREAMING_EN_DIR)).unwrap();
-    let samples = if sample_rate != info.sample_rate as usize {
-        phonex::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)
-    } else {
-        samples
-    };
+    let samples = maybe_resample(samples, sample_rate, info.sample_rate as usize);
 
     for chunk_size in [1000, 4000, 8000, 16000] {
         let mut pipeline = phonex::streaming_pipeline::StreamingPipeline::from_model_dir(STREAMING_EN_DIR, &info, None)

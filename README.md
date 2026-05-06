@@ -17,7 +17,7 @@
 - **Offline** — transcribe audio files end-to-end. Works with **any language** that has a Sherpa-ONNX Zipformer model (Thai, English, Chinese, German, etc.).
 - **Streaming** — real-time chunk-by-chunk transcription. Currently works with **English streaming Zipformer models** only, because Sherpa-ONNX has not yet released streaming variants for other languages.
 
-The default model directory points to the Sherpa-ONNX Zipformer Thai model (GigaSpeech2, INT8 quantized, ~148 MB). Download it below or point `--model-dir` to any Sherpa-ONNX Zipformer model.
+The default model is English (`sherpa-onnx-zipformer-en-2023-06-26`). You can switch languages with the `--language` flag or point `--model-dir` to any Sherpa-ONNX Zipformer model.
 
 ## Status
 
@@ -44,17 +44,28 @@ The default model directory points to the Sherpa-ONNX Zipformer Thai model (Giga
 
 ### Language support matrix
 
-| Language | Offline | Streaming | Example model |
-|----------|---------|-----------|---------------|
-| **Thai** | ✅ | ❌ (no model yet) | `sherpa-onnx-zipformer-thai-2024-06-21` |
-| **English** | ✅ | ✅ | `sherpa-onnx-streaming-zipformer-en-2023-06-21` |
-| **Chinese, German, etc.** | ✅ | ❌ (no model yet) | Any Sherpa-ONNX Zipformer model |
+| Language | Offline | Streaming | CLI flag | Example model |
+|----------|---------|-----------|----------|---------------|
+| **English** | ✅ | ✅ | `--language english` | `sherpa-onnx-zipformer-en-2023-06-26` (offline) / `sherpa-onnx-streaming-zipformer-en-2023-06-21` (streaming) |
+| **Chinese** | ✅ | — | `--language chinese` | `sherpa-onnx-zipformer-zh-en-2023-11-22` (Chinese+English bilingual) |
+| **French** | — | ✅ | `--language fr20230414` | `sherpa-onnx-streaming-zipformer-fr-2023-04-14` |
+| **German** | — | ✅ | `--language de-kroko-20250806` | `sherpa-onnx-streaming-zipformer-de-kroko-2025-08-06` |
+| **Japanese** | ✅ | — | `--language japanese` | `sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01` |
+| **Korean** | ✅ | ✅ | `--language korean` | `sherpa-onnx-zipformer-korean-2024-06-24` (offline) / `sherpa-onnx-streaming-zipformer-korean-2024-06-16` (streaming) |
+| **Russian** | ✅ | — | `--language russian` | `sherpa-onnx-small-zipformer-ru-2024-09-18` |
+| **Spanish** | — | ✅ | `--language es-kroko-20250806` | `sherpa-onnx-streaming-zipformer-es-kroko-2025-08-06` |
+| **Thai** | ✅ | — | `--language thai` | `sherpa-onnx-zipformer-thai-2024-06-20` |
+| **Vietnamese** | ✅ | — | `--language vietnamese` | `sherpa-onnx-zipformer-vi-30M-int8-2026-02-09` |
+| **Other** | ✅ | — | — | Any Sherpa-ONNX Zipformer offline model |
 
-> **Why English only for streaming?** Streaming requires a special "streaming Zipformer" encoder with cached states (35 tensors in our case). Sherpa-ONNX has released streaming variants for English, but not yet for Thai or other languages. When streaming models become available for other languages, they will work out of the box — no code changes needed.
+> **Streaming vs offline:** Offline модели транскрибируют файл целиком. Streaming модели работают в реальном времени (chunk-by-chunk) и используются только в бинарнике `streaming`. Не все языки имеют streaming-модели — их наличие зависит от upstream (Sherpa-ONNX).
 
 ### Known limitations
-- Streaming requires a streaming Zipformer model. Only English has one in Sherpa-ONNX today.
+- Streaming требует специальной streaming Zipformer модели. На данный момент streaming есть для English, French, German, Spanish и Korean.
 - CoreML EP is ~6× slower than CPU for the streaming encoder (measured on M-series). CPU is recommended for streaming.
+- First run with a new `--language` will download the model archive (30–600 MB depending on language).
+- CoreML EP is ~6× slower than CPU for the streaming encoder (measured on M-series). CPU is recommended for streaming.
+- First run with a new `--language` will download the model archive (30–600 MB depending on language).
 
 ## Why phonex?
 
@@ -84,26 +95,67 @@ Place model files in any directory (e.g. `models/my-model/`). The server auto-di
 
 On first load, `phonex` probes the ONNX sessions to detect shapes and tensor names, then writes a `model.json` manifest for instant subsequent starts.
 
-### Thai model (default)
+### Built-in languages (auto-download)
+
+phonex can automatically download models for supported languages on first use:
+
+```bash
+# English (default)
+cargo run --release --bin phonex -- transcribe audio.wav
+
+# Chinese + English bilingual
+cargo run --release --bin phonex -- transcribe audio.wav --language chinese
+
+# Japanese
+cargo run --release --bin phonex -- transcribe audio.wav --language japanese
+
+# Korean
+cargo run --release --bin phonex -- transcribe audio.wav --language korean
+
+# Russian (small model, ~86 MB)
+cargo run --release --bin phonex -- transcribe audio.wav --language russian
+
+# Thai
+cargo run --release --bin phonex -- transcribe audio.wav --language thai
+
+# Vietnamese (small int8 model, ~30 MB)
+cargo run --release --bin phonex -- transcribe audio.wav --language vietnamese
+```
+
+### Manual download
+
+If you prefer to download models manually, place them in `models/`:
 
 ```bash
 cd models
+
+# English offline
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-en-2023-06-26.tar.bz2
+tar xf sherpa-onnx-zipformer-en-2023-06-26.tar.bz2
+
+# Chinese + English bilingual
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-zh-en-2023-11-22.tar.bz2
+tar xf sherpa-onnx-zipformer-zh-en-2023-11-22.tar.bz2
+
+# Japanese
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01.tar.bz2
+tar xf sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01.tar.bz2
+
+# Korean
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-korean-2024-06-24.tar.bz2
+tar xf sherpa-onnx-zipformer-korean-2024-06-24.tar.bz2
+
+# Russian small
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-small-zipformer-ru-2024-09-18.tar.bz2
+tar xf sherpa-onnx-small-zipformer-ru-2024-09-18.tar.bz2
+
+# Thai
 wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-thai-2024-06-20.tar.bz2
 tar xf sherpa-onnx-zipformer-thai-2024-06-20.tar.bz2
-rm sherpa-onnx-zipformer-thai-2024-06-20.tar.bz2
-```
 
-### English model example
-
-```bash
-cd models
-wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-2023-06-21.tar.bz2
-tar xf sherpa-onnx-streaming-zipformer-en-2023-06-21.tar.bz2
-```
-
-Then run:
-```bash
-cargo run --release --bin phonex -- transcribe audio.wav --model-dir models/sherpa-onnx-streaming-zipformer-en-2023-06-21
+# Vietnamese small int8
+wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-vi-30M-int8-2026-02-09.tar.bz2
+tar xf sherpa-onnx-zipformer-vi-30M-int8-2026-02-09.tar.bz2
 ```
 
 ## Docker
@@ -175,60 +227,71 @@ docker run -p 8080:8080 -v ./models:/app/models ghcr.io/ekhodzitsky/phonex:lates
 
 ## Quick Start
 
-### Thai — offline transcription (default)
+### English — offline transcription (default)
 
 ```bash
-# Download Thai model
-cd models
-wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-thai-2024-06-20.tar.bz2
-tar xf sherpa-onnx-zipformer-thai-2024-06-20.tar.bz2
-
-# Transcribe a Thai audio file
+# Transcribe an English audio file
 cargo run --release --bin phonex -- transcribe audio.wav
-# → สวัสดีครับ
+# → "hello world"
 ```
 
 ### English — real-time streaming
 
 ```bash
-# Download English streaming model
-cd models
-wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-2023-06-21.tar.bz2
-tar xf sherpa-onnx-streaming-zipformer-en-2023-06-21.tar.bz2
-
 # Stream from a WAV file (simulates microphone)
 cargo run --release --bin streaming -- \
   --wav audio.wav \
-  --model-dir models/sherpa-onnx-streaming-zipformer-en-2023-06-21 \
+  --language en20230621 \
   --chunk-ms 500
 
 # Or start the server with WebSocket streaming
 cargo run --release --bin server -- \
-  --model-dir models/sherpa-onnx-streaming-zipformer-en-2023-06-21 \
+  --language english \
   --port 8080
+```
+
+### Other streaming languages
+
+```bash
+# French streaming
+cargo run --release --bin streaming -- --wav audio.wav --language fr20230414
+
+# German streaming
+cargo run --release --bin streaming -- --wav audio.wav --language de-kroko-20250806
+
+# Spanish streaming
+cargo run --release --bin streaming -- --wav audio.wav --language es-kroko-20250806
+
+# Korean streaming
+cargo run --release --bin streaming -- --wav audio.wav --language ko20240616
 ```
 
 ### Generic CLI commands
 
 ```bash
-# Offline transcription of any supported audio format
+# Offline transcription of any supported audio format (English default)
 cargo run --release --bin phonex -- transcribe audio.mp3 --format json
 
-# Use a non-default model directory
+# Use a specific language
+cargo run --release --bin phonex -- transcribe audio.wav --language russian
+
+# Use a custom model directory
 cargo run --release --bin phonex -- transcribe audio.wav --model-dir models/my-model
 
 # Start the HTTP server with Thai model
-cargo run --release --bin phonex -- serve --port 8080 --pool-size 2
+cargo run --release --bin phonex -- serve --port 8080 --pool-size 2 --language thai
 ```
 
 ## Server Usage
 
 ```bash
-# Start the HTTP/WebSocket server with default Thai model
+# Start the HTTP/WebSocket server with default English model
 cargo run --release --bin server -- --port 8080 --pool-size 2
 
-# Use an English model with streaming support
-cargo run --release --bin server -- --model-dir models/sherpa-onnx-streaming-zipformer-en-2023-06-21 --port 8080
+# Use a specific language
+cargo run --release --bin server -- --language japanese --port 8080
+cargo run --release --bin server -- --language chinese --port 8080
+cargo run --release --bin server -- --language korean --port 8080
 
 # Production: enable auth and restrict CORS
 cargo run --release --bin server \
@@ -238,7 +301,8 @@ cargo run --release --bin server \
 ```
 
 Options:
-- `--model-dir` — model directory (default: `models/sherpa-onnx-zipformer-thai-2024-06-20`)
+- `--model-dir` — model directory (overrides `--language`)
+- `--language` — built-in language model (`chinese`, `english`, `japanese`, `korean`, `russian`, `thai`, `vietnamese`)
 - `--bind` — bind address (default: `127.0.0.1`)
 - `--port` — listen port (default: `8080`)
 - `--pool-size` — parallel ONNX session pool size for offline inference (default: `1`)
@@ -410,8 +474,8 @@ A: Yes. Drop any Sherpa-ONNX Zipformer encoder-decoder-joiner model into a direc
 **Q: Does it run on Raspberry Pi / embedded?**
 A: Should work on any Linux ARM64 with ONNX Runtime. Not yet tested on Raspberry Pi — if you try it, open an issue with results.
 
-**Q: Will Thai streaming work soon?**
-A: phonex is ready — we just need Sherpa-ONNX to release a Thai streaming Zipformer model. When they do, it will work with zero code changes.
+**Q: Will non-English streaming work soon?**
+A: phonex уже поддерживает streaming для English, French, German, Spanish и Korean. Для Japanese, Russian, Thai и Vietnamese пока нет streaming моделей в Sherpa-ONNX. Когда они появятся — заработают без изменений кода.
 
 **Q: How does phonex compare to running sherpa-onnx Python?**
 A: phonex is a single static binary with no Python environment. Easier to deploy, harder to break, lower memory overhead. Feature parity for inference; phonex adds built-in REST/WebSocket server.
@@ -425,7 +489,7 @@ A: phonex is a single static binary with no Python environment. Easier to deploy
 - [ ] OpenAPI spec + Swagger UI
 - [ ] Distributed tracing (OpenTelemetry)
 - [ ] Model hot-swap without restart
-- [ ] Thai streaming (blocked by upstream model availability)
+- [ ] Streaming models for Japanese, Russian, Thai, Vietnamese (blocked by upstream model availability)
 - [ ] Raspberry Pi / embedded ARM32 support
 - [ ] Real-time microphone input example
 

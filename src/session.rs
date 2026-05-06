@@ -15,11 +15,15 @@ pub fn load_onnx_session_cpu(path: &str) -> crate::Result<Session> {
     load_onnx_session_impl(path, true)
 }
 
+fn ort_err(msg: &str, e: impl std::fmt::Display) -> crate::SiamError {
+    crate::SiamError::Inference(format!("{msg}: {e}"))
+}
+
 fn load_onnx_session_impl(path: &str, #[allow(unused_variables)] force_cpu: bool) -> crate::Result<Session> {
     let mut builder = Session::builder()
-        .map_err(|e| crate::SiamError::Inference(format!("ORT session builder error: {e}")))?
+        .map_err(|e| ort_err("ORT session builder error", e))?
         .with_intra_threads(4)
-        .map_err(|e| crate::SiamError::Inference(format!("ORT session builder error: {e}")))?;
+        .map_err(|e| ort_err("ORT session builder error", e))?;
 
     #[cfg(all(feature = "coreml", target_vendor = "apple"))]
     if !force_cpu {
@@ -29,15 +33,15 @@ fn load_onnx_session_impl(path: &str, #[allow(unused_variables)] force_cpu: bool
             .build();
         let mut builder = builder
             .with_execution_providers([ep])
-            .map_err(|e| crate::SiamError::Inference(format!("ORT execution provider error: {e}")))?;
+            .map_err(|e| ort_err("ORT execution provider error", e))?;
         let session = builder
             .commit_from_file(path)
-            .map_err(|e| crate::SiamError::Inference(format!("ORT commit error: {e}")))?;
+            .map_err(|e| ort_err("ORT commit error", e))?;
         tracing::info!(model = %path, "Loaded ONNX session with CoreML (experimental — may be slower than CPU for some models)");
         return Ok(session);
     }
 
     builder
         .commit_from_file(path)
-        .map_err(|e| crate::SiamError::Inference(format!("ORT commit error: {e}")))
+        .map_err(|e| ort_err("ORT commit error", e))
 }

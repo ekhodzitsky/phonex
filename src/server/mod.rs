@@ -19,7 +19,7 @@ use tower_http::trace::TraceLayer;
 use crate::inference::Engine;
 
 /// Supported input sample rates (Hz). Default is 16000.
-pub(crate) const SUPPORTED_RATES: &[u32] = &[8000, 16000, 24000, 44100, 48000];
+pub(crate) use crate::inference::SUPPORTED_RATES;
 
 /// Hint (milliseconds) returned to clients that hit pool backpressure.
 pub(crate) const POOL_RETRY_AFTER_MS: u32 = 30_000;
@@ -51,6 +51,19 @@ impl Default for RuntimeLimits {
             ],
             ws_idle_timeout_secs: 60,
         }
+    }
+}
+
+/// Async shutdown signal handler (SIGTERM / SIGINT).
+pub async fn shutdown_signal() {
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .expect("Failed to install SIGTERM handler");
+    let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+        .expect("Failed to install SIGINT handler");
+
+    tokio::select! {
+        _ = sigterm.recv() => tracing::info!("Received SIGTERM"),
+        _ = sigint.recv() => tracing::info!("Received SIGINT"),
     }
 }
 

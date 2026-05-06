@@ -165,6 +165,20 @@ pub struct ModelInfo {
     pub model_name: String,
 }
 
+trait Named {
+    fn name(&self) -> &str;
+}
+
+impl Named for ort::value::Outlet {
+    fn name(&self) -> &str {
+        self.name()
+    }
+}
+
+fn io_names(config_names: Option<Vec<String>>, fallback: &[impl Named]) -> Vec<String> {
+    config_names.unwrap_or_else(|| fallback.iter().map(|v| v.name().to_string()).collect())
+}
+
 impl ModelInfo {
     /// Load model info from ONNX sessions, optionally overridden by a JSON config.
     pub fn from_model_dir(model_dir: &str) -> crate::Result<Self> {
@@ -223,18 +237,12 @@ impl ModelInfo {
             }).unwrap_or(2000)
         });
 
-        let encoder_inputs = config.encoder.as_ref().map(|c| c.input_names.clone())
-            .unwrap_or_else(|| encoder.inputs().iter().map(|i| i.name().to_string()).collect());
-        let encoder_outputs = config.encoder.as_ref().map(|c| c.output_names.clone())
-            .unwrap_or_else(|| encoder.outputs().iter().map(|o| o.name().to_string()).collect());
-        let decoder_inputs = config.decoder.as_ref().map(|c| c.input_names.clone())
-            .unwrap_or_else(|| decoder.inputs().iter().map(|i| i.name().to_string()).collect());
-        let decoder_outputs = config.decoder.as_ref().map(|c| c.output_names.clone())
-            .unwrap_or_else(|| decoder.outputs().iter().map(|o| o.name().to_string()).collect());
-        let joiner_inputs = config.joiner.as_ref().map(|c| c.input_names.clone())
-            .unwrap_or_else(|| joiner.inputs().iter().map(|i| i.name().to_string()).collect());
-        let joiner_outputs = config.joiner.as_ref().map(|c| c.output_names.clone())
-            .unwrap_or_else(|| joiner.outputs().iter().map(|o| o.name().to_string()).collect());
+        let encoder_inputs = io_names(config.encoder.as_ref().map(|c| c.input_names.clone()), encoder.inputs());
+        let encoder_outputs = io_names(config.encoder.as_ref().map(|c| c.output_names.clone()), encoder.outputs());
+        let decoder_inputs = io_names(config.decoder.as_ref().map(|c| c.input_names.clone()), decoder.inputs());
+        let decoder_outputs = io_names(config.decoder.as_ref().map(|c| c.output_names.clone()), decoder.outputs());
+        let joiner_inputs = io_names(config.joiner.as_ref().map(|c| c.input_names.clone()), joiner.inputs());
+        let joiner_outputs = io_names(config.joiner.as_ref().map(|c| c.output_names.clone()), joiner.outputs());
 
         // Derive model_id from config or directory basename.
         let dir_basename = Path::new(model_dir)

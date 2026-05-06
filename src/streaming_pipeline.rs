@@ -6,18 +6,18 @@ use ndarray::{Array2, Array3};
 
 use crate::decoder::SherpaDecoder;
 use crate::joiner::SherpaJoiner;
+use crate::inference::decode::argmax_logit_with_confidence;
+use crate::inference::features::phonex_fbank_options;
 use crate::model_config::{ModelInfo, discover_model_files};
 use crate::streaming_decoder::DecodeToken;
 use crate::streaming_encoder::StreamingEncoder;
 use crate::tokenizer::Tokenizer;
 use crate::vad::StreamingVad;
 
-use kaldi_native_fbank::fbank::{FbankComputer, FbankOptions};
+use kaldi_native_fbank::fbank::FbankComputer;
 use kaldi_native_fbank::online::{FeatureComputer, OnlineFeature};
 
 const SAMPLE_RATE: f32 = 16000.0;
-const FRAME_SHIFT_S: f64 = 0.01;
-const MAX_TOKENS_PER_STEP: usize = 20;
 
 /// End-to-end streaming ASR pipeline (encoder + decoder + feature extraction).
 pub struct StreamingPipeline {
@@ -169,7 +169,7 @@ impl StreamingPipeline {
 
             let mut tokens_this_step = 0;
             loop {
-                if tokens_this_step >= MAX_TOKENS_PER_STEP {
+                if tokens_this_step >= crate::inference::MAX_TOKENS_PER_STEP {
                     break;
                 }
 
@@ -186,19 +186,19 @@ impl StreamingPipeline {
                 }
                 self.decoder_context[[0, self.context_size - 1]] = pred_id as i64;
 
-                let abs_t = self.global_time_offset + t as f64 * FRAME_SHIFT_S;
+                let abs_t = self.global_time_offset + t as f64 * crate::inference::FRAME_SHIFT_S;
                 chunk_tokens.push(DecodeToken {
                     id: pred_id,
                     text: String::new(),
                     start: abs_t,
-                    end: abs_t + FRAME_SHIFT_S,
+                    end: abs_t + crate::inference::FRAME_SHIFT_S,
                     confidence,
                 });
                 tokens_this_step += 1;
             }
         }
 
-        self.global_time_offset += time as f64 * FRAME_SHIFT_S;
+        self.global_time_offset += time as f64 * crate::inference::FRAME_SHIFT_S;
 
         for token in &mut chunk_tokens {
             token.text = self.tokenizer.decode_ids(&[token.id]);
@@ -269,33 +269,6 @@ impl StreamingPipeline {
     }
 }
 
-fn phonex_fbank_options() -> FbankOptions {
-    let mut opts = FbankOptions::default();
-    opts.mel_opts.num_bins = 80;
-    opts.use_energy = false;
-    opts.frame_opts.dither = 0.0;
-    opts
-}
 
-fn argmax_logit_with_confidence(logits: &Array2<f32>, blank_id: u32) -> (u32, f32) {
-    let view = logits.index_axis(ndarray::Axis(0), 0);
-    let slice: Vec<f32> = view.iter().copied().collect();
 
-    let max_logit = slice.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    let exp_sum: f32 = slice.iter().map(|&x| (x - max_logit).exp()).sum();
 
-    let (idx, max_val) = slice
-        .iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.total_cmp(b))
-        .map(|(idx, &val)| (idx, val))
-        .unwrap_or((blank_id as usize, 0.0));
-
-    let confidence = if exp_sum > 0.0 {
-        (max_val - max_logit).exp() / exp_sum
-    } else {
-        1.0
-    };
-
-    (idx as u32, confidence)
-}

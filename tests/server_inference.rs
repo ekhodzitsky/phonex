@@ -38,15 +38,18 @@ fn real_engine() -> (Arc<Engine>, phonex::model_config::ModelInfo) {
     (Arc::new(Engine::new(pool, tokenizer, info.clone())), info)
 }
 
+fn maybe_resample(samples: Vec<f32>, sample_rate: usize, target_rate: usize) -> Vec<f32> {
+    if sample_rate == target_rate {
+        samples
+    } else {
+        phonex::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)
+    }
+}
+
 fn read_test_wav_raw() -> Vec<u8> {
     use phonex::audio::AudioPreprocessor;
     let (samples, sample_rate) = AudioPreprocessor::read_wav(&format!("{}/test_wavs/0.wav", MODEL_DIR)).unwrap();
-    let samples = if sample_rate != 16000 {
-        let preprocessor = AudioPreprocessor::typhoon();
-        preprocessor.resample(&samples, sample_rate)
-    } else {
-        samples
-    };
+    let samples = maybe_resample(samples, sample_rate, 16000);
     samples.into_iter().flat_map(|f| f.to_le_bytes()).collect()
 }
 

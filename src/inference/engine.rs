@@ -72,7 +72,7 @@ impl Engine {
         Self {
             pool: SessionPool::new(vec![]),
             mel: MelSpectrogram::new(),
-            tokenizer: Arc::new(Tokenizer::from_file("", "", 0).unwrap_or_else(|_| Tokenizer::from_file("", "", 0).unwrap())),
+            tokenizer: Arc::new(Tokenizer::from_file("", "", 0).unwrap()),
             vocab_size: 2000,
             info,
             vad: None,
@@ -95,10 +95,10 @@ impl Engine {
 
     pub fn transcribe_bytes_shared(
         &self,
-        data: Bytes,
+        data: &Bytes,
         triplet: &mut SessionTriplet,
     ) -> Result<TranscribeResult, SiamError> {
-        let samples = bytes_to_f32_samples(&data);
+        let samples = crate::inference::audio::bytes_to_f32_samples(data);
         self.transcribe_samples(&samples, triplet)
     }
 
@@ -149,10 +149,10 @@ impl Engine {
     /// Transcribe an audio file and return full details (text + words with timing).
     pub fn transcribe_file_with_details(&self, path: &str) -> crate::Result<TranscribeResult> {
         let (samples, sample_rate) = crate::audio::AudioPreprocessor::read_wav(path)?;
-        let samples = if sample_rate != self.info.sample_rate as usize {
-            crate::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)
-        } else {
+        let samples = if sample_rate == self.info.sample_rate as usize {
             samples
+        } else {
+            crate::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)
         };
         let mut guard = self.pool.try_checkout()
             .ok_or_else(|| SiamError::Inference("Pool empty".into()))?;
@@ -340,9 +340,4 @@ impl Engine {
     }
 }
 
-/// Convert a little-endian byte slice to a Vec<f32>.
-fn bytes_to_f32_samples(data: &[u8]) -> Vec<f32> {
-    data.chunks_exact(4)
-        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
-        .collect()
-}
+

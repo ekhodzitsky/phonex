@@ -28,6 +28,15 @@ impl StreamingEncoder {
         Self::from_session(session)
     }
 
+    fn zero_state_tensor(name: &str, shape: Vec<usize>) -> crate::Result<ort::value::Value> {
+    let value = if name.starts_with("cached_len_") {
+        Tensor::from_array(ndarray::Array::<i64, _>::zeros(shape))?.into_dyn()
+    } else {
+        Tensor::from_array(ndarray::Array::<f32, _>::zeros(shape))?.into_dyn()
+    };
+    Ok(value)
+}
+
     pub fn from_session(session: Session) -> crate::Result<Self> {
         let mut states = HashMap::new();
 
@@ -43,14 +52,7 @@ impl StreamingEncoder {
                 _ => continue,
             };
 
-            let value = if name.starts_with("cached_len_") {
-                let arr = ndarray::Array::<i64, _>::zeros(shape);
-                Tensor::from_array(arr)?.into_dyn()
-            } else {
-                let arr = ndarray::Array::<f32, _>::zeros(shape);
-                Tensor::from_array(arr)?.into_dyn()
-            };
-            states.insert(name, value);
+            states.insert(name.clone(), Self::zero_state_tensor(&name, shape)?);
         }
 
         let input_names: Vec<String> = session.inputs().iter().map(|i| i.name().to_string()).collect();
@@ -152,14 +154,10 @@ impl StreamingEncoder {
                 _ => continue,
             };
 
-            let value = if name.starts_with("cached_len_") {
-                let arr = ndarray::Array::<i64, _>::zeros(shape);
-                Tensor::from_array(arr).expect("infallible zeros tensor").into_dyn()
-            } else {
-                let arr = ndarray::Array::<f32, _>::zeros(shape);
-                Tensor::from_array(arr).expect("infallible zeros tensor").into_dyn()
-            };
-            self.states.insert(name, value);
+            self.states.insert(
+                name.clone(),
+                Self::zero_state_tensor(&name, shape).expect("infallible zeros tensor"),
+            );
         }
     }
 }

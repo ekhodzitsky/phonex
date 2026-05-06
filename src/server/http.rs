@@ -205,21 +205,11 @@ pub struct TranscribeQuery {
     pub vad: bool,
 }
 
-/// POST /v1/transcribe — upload audio via multipart, get full transcript.
-///
-/// Accepts `audio` field with raw mono f32 LE bytes and optional `sample_rate` field.
-/// Default sample rate is 16000 Hz.
-pub async fn transcribe(
-    State(state): State<Arc<AppState>>,
-    Query(query): Query<TranscribeQuery>,
-    mut multipart: Multipart,
-) -> Result<Json<TranscribeResponse>, ApiError> {
-    let _guard = MetricsGuard {
-        registry: &state.metrics_registry,
-        method: "POST",
-        path: "/v1/transcribe",
-        start: std::time::Instant::now(),
-    };
+async fn extract_audio_from_multipart(
+    multipart: &mut Multipart,
+    query: &TranscribeQuery,
+    body_limit_bytes: usize,
+) -> Result<(Bytes, u32), ApiError> {
     let mut audio_bytes: Option<Bytes> = None;
     let mut sample_rate = query.sample_rate;
 
@@ -240,16 +230,11 @@ pub async fn transcribe(
         }
     }
 
-    let body = match audio_bytes {
-        Some(b) => b,
-        None => {
-            return Err(api_error(
-                StatusCode::BAD_REQUEST,
-                "Missing 'audio' field in multipart upload",
-                "missing_audio",
-            ));
-        }
-    };
+    let body = audio_bytes.ok_or_else(|| api_error(
+        StatusCode::BAD_REQUEST,
+        "Missing 'audio' field in multipart upload",
+        "missing_audio",
+    ))?;
 
     if body.is_empty() {
         return Err(api_error(
@@ -259,7 +244,7 @@ pub async fn transcribe(
         ));
     }
 
-    if body.len() > state.limits.body_limit_bytes {
+    if body.len() > body_limit_bytes {
         return Err(api_error(
             StatusCode::PAYLOAD_TOO_LARGE,
             "Request body exceeds the configured size limit",
@@ -276,6 +261,25 @@ pub async fn transcribe(
         ));
     }
 
+    Ok((body, client_rate))
+}
+
+/// POST /v1/transcribe — upload audio via multipart, get full transcript.
+///
+/// Accepts `audio` field with raw mono f32 LE bytes and optional `sample_rate` field.
+/// Default sample rate is 16000 Hz.
+pub async fn transcribe(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<TranscribeQuery>,
+    mut multipart: Multipart,
+) -> Result<Json<TranscribeResponse>, ApiError> {
+    let _guard = MetricsGuard {
+        registry: &state.metrics_registry,
+        method: "POST",
+        path: "/v1/transcribe",
+        start: std::time::Instant::now(),
+    };
+    let (body, client_rate) = extract_audio_from_multipart(&mut multipart, &query, state.limits.body_limit_bytes).await?;
     let use_vad = query.vad;
     let (triplet, reservation) = checkout_triplet(&state.engine).await?;
     let engine = state.engine.clone();
@@ -284,7 +288,7 @@ pub async fn transcribe(
         let mut triplet = triplet;
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             // Convert f32 LE bytes to Vec<f32>
-            let samples_f32 = bytes_to_f32_samples(&body);
+            let samples_f32 = crate::inference::audio::bytes_to_f32_samples(&body);
             // Resample if needed
             let samples = if client_rate == crate::inference::TARGET_SAMPLE_RATE {
                 samples_f32
@@ -379,7 +383,7 @@ pub async fn transcribe_batch(
             // Convert all files to f32 samples
             let mut sample_buffers: Vec<Vec<f32>> = Vec::with_capacity(files.len());
             for (body, client_rate) in &files {
-                let samples_f32 = bytes_to_f32_samples(body);
+                let samples_f32 = crate::inference::audio::bytes_to_f32_samples(body);
                 let samples = if *client_rate == crate::inference::TARGET_SAMPLE_RATE {
                     samples_f32
                 } else {
@@ -443,62 +447,7 @@ pub async fn transcribe_stream(
         path: "/v1/transcribe/stream",
         start: std::time::Instant::now(),
     };
-    let mut audio_bytes: Option<Bytes> = None;
-    let mut sample_rate = query.sample_rate;
-
-    while let Ok(Some(field)) = multipart.next_field().await {
-        match field.name() {
-            Some("audio") => {
-                if let Ok(data) = field.bytes().await {
-                    audio_bytes = Some(data);
-                }
-            }
-            Some("sample_rate") => {
-                if let Ok(text) = field.text().await
-                    && let Ok(rate) = text.trim().parse::<u32>() {
-                        sample_rate = Some(rate);
-                    }
-            }
-            _ => {}
-        }
-    }
-
-    let body = match audio_bytes {
-        Some(b) => b,
-        None => {
-            return Err(api_error(
-                StatusCode::BAD_REQUEST,
-                "Missing 'audio' field in multipart upload",
-                "missing_audio",
-            ));
-        }
-    };
-
-    if body.is_empty() {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            "Empty request body",
-            "empty_body",
-        ));
-    }
-
-    if body.len() > state.limits.body_limit_bytes {
-        return Err(api_error(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "Request body exceeds the configured size limit",
-            "payload_too_large",
-        ));
-    }
-
-    let client_rate = sample_rate.unwrap_or(crate::inference::TARGET_SAMPLE_RATE);
-    if !super::SUPPORTED_RATES.contains(&client_rate) {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            &format!("Unsupported sample rate: {client_rate}Hz"),
-            "invalid_sample_rate",
-        ));
-    }
-
+    let (body, client_rate) = extract_audio_from_multipart(&mut multipart, &query, state.limits.body_limit_bytes).await?;
     let (triplet, reservation) = checkout_triplet(&state.engine).await?;
 
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<crate::inference::TranscriptSegment, String>>(16);
@@ -509,7 +458,7 @@ pub async fn transcribe_stream(
     tracker.spawn_blocking(move || {
         let mut triplet = triplet;
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let samples_f32 = bytes_to_f32_samples(&body);
+            let samples_f32 = crate::inference::audio::bytes_to_f32_samples(&body);
             let samples = if client_rate == crate::inference::TARGET_SAMPLE_RATE {
                 samples_f32
             } else {
@@ -578,9 +527,4 @@ pub async fn transcribe_stream(
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
 
-/// Convert a little-endian byte slice to a Vec<f32>.
-fn bytes_to_f32_samples(data: &[u8]) -> Vec<f32> {
-    data.chunks_exact(4)
-        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
-        .collect()
-}
+

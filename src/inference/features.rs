@@ -69,7 +69,7 @@ impl MelSpectrogram {
 }
 
 /// FBANK options used by Sherpa-ONNX Zipformer models.
-fn phonex_fbank_options() -> FbankOptions {
+pub(crate) fn phonex_fbank_options() -> FbankOptions {
     let mut opts = FbankOptions::default();
     opts.mel_opts.num_bins = 80;
     opts.use_energy = false;
