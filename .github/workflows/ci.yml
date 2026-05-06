@@ -68,6 +68,13 @@ jobs:
             rm /tmp/en.tar.bz2
           fi
 
+      - name: Download Silero VAD model
+        run: |
+          if [ ! -f "models/silero_vad.onnx" ]; then
+            curl -fsSL -o models/silero_vad.onnx \
+              https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx
+          fi
+
       - name: Build
         run: cargo build --release
 
