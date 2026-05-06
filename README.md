@@ -1,16 +1,17 @@
 # phonex
 
 [![CI](https://github.com/ekhodzitsky/phonex/actions/workflows/ci.yml/badge.svg)](https://github.com/ekhodzitsky/phonex/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ekhodzitsky/phonex)](https://github.com/ekhodzitsky/phonex/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.93%2B-blue.svg)](https://www.rust-lang.org)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://github.com/ekhodzitsky/phonex/blob/main/Dockerfile)
+[![GitHub stars](https://img.shields.io/github/stars/ekhodzitsky/phonex?style=social)](https://github.com/ekhodzitsky/phonex)
 
 > Generic on-device speech-to-text. Local inference, no cloud APIs, full privacy.
 
 ## Overview
 
-`phonex` started as a Thai STT project (originally named *siamstt*, from *Siam* = Thailand) and evolved into a **generic multilingual STT engine**.
-
-Today it is a Rust library + CLI + HTTP/WebSocket server that performs speech-to-text using **any Sherpa-ONNX Zipformer-transducer model**. It auto-detects model parameters (`d_model`, `vocab_size`, `context_size`, tensor names) from ONNX metadata, so you can drop in any language model and it just works.
+**phonex** is a Rust library + CLI + HTTP/WebSocket server that performs speech-to-text using **any Sherpa-ONNX Zipformer-transducer model**. It auto-detects model parameters (`d_model`, `vocab_size`, `context_size`, tensor names) from ONNX metadata, so you can drop in any language model and it just works.
 
 **Two inference modes:**
 - **Offline** — transcribe audio files end-to-end. Works with **any language** that has a Sherpa-ONNX Zipformer model (Thai, English, Chinese, German, etc.).
