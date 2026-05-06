@@ -1,0 +1,131 @@
+[package]
+name = "phonex"
+version = "0.2.0"
+edition = "2024"
+description = "Local multilingual STT engine powered by Sherpa-ONNX Zipformer — offline and streaming speech recognition via ONNX Runtime"
+license = "MIT"
+repository = "https://github.com/ekhodzitsky/phonex"
+keywords = ["stt", "speech-recognition", "zipformer", "onnx", "streaming"]
+categories = ["multimedia::audio", "command-line-utilities"]
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = ["server"]
+server = ["dep:axum", "dep:tokio-stream", "dep:tokio-util", "dep:tower-http", "dep:tower"]
+coreml = ["ort/coreml"]
+cuda = ["ort/cuda"]
+ffi = ["ort/nnapi"]
+
+[dependencies]
+# ONNX Runtime
+ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "api-23"] }
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "signal", "macros", "fs"] }
+
+# Async MPMC channel — backs the SessionPool (FIFO + close semantics)
+async-channel = "2"
+
+# HTTP + WebSocket server (single port via axum)
+axum = { version = "0.8", features = ["ws", "multipart"], optional = true }
+futures-util = "0.3"
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# HTTP client for model download
+reqwest = { version = "0.13", features = ["stream"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Cryptographic hashing for model verification
+sha2 = "0.11"
+
+# Archive extraction for model auto-download
+tar = "0.4"
+bzip2 = "0.5"
+
+# Progress bar for CLI downloads
+indicatif = "0.17"
+
+# Request ID generation for tracing
+uuid = { version = "1", features = ["v4"] }
+
+# Kaldi-compatible FBANK feature extractor (pure Rust port of
+# kaldi-native-fbank, the same library sherpa-onnx uses for Zipformer
+# preprocessing).
+kaldi-native-fbank = "0.1"
+
+# High-quality audio resampling
+rubato = "2.0"
+
+# Async stream adapters (ReceiverStream for SSE)
+tokio-stream = { version = "0.1", optional = true }
+
+# Cancellation + task tracking for graceful WS/SSE drain on shutdown.
+# `rt` pulls in `CancellationToken` + `TaskTracker` (tokio-util 0.7).
+tokio-util = { version = "0.7", features = ["rt"], optional = true }
+
+# HTTP middleware (CORS, trace, etc.)
+tower-http = { version = "0.6", features = ["cors", "trace"], optional = true }
+tower = { version = "0.5", optional = true }
+
+# Audio file reading (for `transcribe` command)
+symphonia = { version = "0.5", features = ["aac", "isomp4", "mp3", "ogg", "flac", "pcm", "wav"] }
+
+# WAV file reading (legacy audio preprocessor)
+hound = "3"
+
+# Explicit pin for zero-copy byte buffers shared with symphonia.
+bytes = "1"
+
+# Per-IP rate limiting (token bucket, optional — off by default).
+# `dashmap` gives lock-free reads on the common path.
+dashmap = "6"
+
+# SentencePiece tokenization
+sentencepiece = "0.13"
+
+# N-dimensional arrays
+ndarray = "0.17"
+
+# FFT for legacy audio preprocessor
+realfft = "3"
+
+[dev-dependencies]
+tempfile = "3"
+tokio-tungstenite = "0.29"
+criterion = { version = "0.8", features = ["html_reports"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[[bin]]
+name = "phonex"
+required-features = ["server"]
+
+[[bin]]
+name = "streaming"
+path = "src/bin/streaming.rs"
+
+[[bench]]
+name = "latency"
+harness = false
+
+[[bench]]
+name = "streaming_latency"
+harness = false

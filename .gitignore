@@ -17,3 +17,15 @@ Thumbs.db
 # Models
 models/
 *.onnx
+
+# Local environment
+venv/
+.cargo/
+recon/
+*.npy
+*.bin
+*.wav
+
+# Added by cargo
+
+/target

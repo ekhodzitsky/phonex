@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install ONNX Runtime (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install onnxruntime
+          echo "ORT_LIB_PATH=$(brew --prefix onnxruntime)/lib" >> $GITHUB_ENV
+          echo "DYLD_LIBRARY_PATH=$(brew --prefix onnxruntime)/lib" >> $GITHUB_ENV
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+
+      - name: Install ONNX Runtime (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          curl -fsSL https://github.com/microsoft/onnxruntime/releases/download/v1.25.1/onnxruntime-linux-x64-1.25.1.tgz -o onnxruntime.tgz
+          sudo tar -xzf onnxruntime.tgz -C /opt
+          sudo mv /opt/onnxruntime-linux-x64-1.25.1 /opt/onnxruntime
+          echo "ORT_LIB_PATH=/opt/onnxruntime/lib" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/opt/onnxruntime/lib" >> $GITHUB_ENV
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+
+      - name: Cache models
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: ${{ runner.os }}-models-${{ hashFiles('**/ci.yml') }}
+          restore-keys: ${{ runner.os }}-models-
+
+      - name: Download Thai model
+        run: |
+          mkdir -p models
+          if [ ! -d "models/sherpa-onnx-zipformer-thai-2024-06-20" ]; then
+            curl -fsSL -o /tmp/thai.tar.bz2 \
+              https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-thai-2024-06-20.tar.bz2
+            tar -xjf /tmp/thai.tar.bz2 -C models
+            rm /tmp/thai.tar.bz2
+          fi
+
+      - name: Download English streaming model
+        run: |
+          if [ ! -d "models/sherpa-onnx-streaming-zipformer-en-2023-06-21" ]; then
+            curl -fsSL -o /tmp/en.tar.bz2 \
+              https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-2023-06-21.tar.bz2
+            tar -xjf /tmp/en.tar.bz2 -C models
+            rm /tmp/en.tar.bz2
+          fi
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Run tests
+        run: cargo test --all-targets
+
+      - name: Run integration tests (with models)
+        run: cargo test --test integration -- --ignored
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: docker buildx build --platform linux/amd64,linux/arm64 -t phonex:latest .

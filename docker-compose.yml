@@ -1,0 +1,21 @@
+services:
+  phonex:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - TARGETARCH=${TARGETARCH:-arm64}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./models:/app/models
+    environment:
+      - RUST_LOG=info
+      - MODEL_DIR=/app/models
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

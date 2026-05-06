@@ -1,0 +1,164 @@
+//! HTTP + WebSocket server that accepts audio and streams transcripts.
+//!
+//! Single port serves both REST API (health, transcribe, SSE) and WebSocket.
+
+pub mod http;
+pub mod metrics;
+pub mod rate_limit;
+pub mod ws;
+
+use axum::Router;
+use axum::extract::{DefaultBodyLimit, State};
+use axum::http::{header, StatusCode};
+use axum::middleware::Next;
+use axum::response::{IntoResponse, Json, Response};
+use std::sync::Arc;
+use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::trace::TraceLayer;
+
+use crate::inference::Engine;
+
+/// Supported input sample rates (Hz). Default is 16000.
+pub(crate) const SUPPORTED_RATES: &[u32] = &[8000, 16000, 24000, 44100, 48000];
+
+/// Hint (milliseconds) returned to clients that hit pool backpressure.
+pub(crate) const POOL_RETRY_AFTER_MS: u32 = 30_000;
+pub(crate) const POOL_RETRY_AFTER_SECS: u64 = 30;
+
+/// Runtime limits for the server.
+#[derive(Debug, Clone)]
+pub struct RuntimeLimits {
+    pub body_limit_bytes: usize,
+    pub rate_limit_per_minute: u32,
+    pub rate_limit_burst: u32,
+    pub max_ws_connections: usize,
+    pub api_key: Option<String>,
+    pub cors_origins: Vec<String>,
+    pub ws_idle_timeout_secs: u64,
+}
+
+impl Default for RuntimeLimits {
+    fn default() -> Self {
+        Self {
+            body_limit_bytes: 500 * 1024 * 1024, // 500 MB
+            rate_limit_per_minute: 0,            // disabled by default
+            rate_limit_burst: 10,
+            max_ws_connections: 100,
+            api_key: None,
+            cors_origins: vec![
+                "http://localhost:3000".into(),
+                "http://localhost:5173".into(),
+            ],
+            ws_idle_timeout_secs: 60,
+        }
+    }
+}
+
+/// Build the axum router with all routes and middleware (default limits).
+pub fn app(engine: Arc<Engine>, model_dir: String, model_info: crate::model_config::ModelInfo) -> Router {
+    app_with_limits(engine, model_dir, model_info, RuntimeLimits::default(), tokio_util::sync::CancellationToken::new())
+}
+
+/// Build the axum router with all routes and middleware.
+pub fn app_with_limits(
+    engine: Arc<Engine>,
+    model_dir: String,
+    model_info: crate::model_config::ModelInfo,
+    limits: RuntimeLimits,
+    shutdown: tokio_util::sync::CancellationToken,
+) -> Router {
+    let metrics_registry = Arc::new(metrics::MetricsRegistry::new());
+    metrics_registry.register_counter("requests_total", "Total HTTP requests");
+    metrics_registry.register_histogram("request_duration_seconds", "HTTP request duration", metrics::DEFAULT_BUCKETS);
+    metrics_registry.register_counter("ws_connections_total", "Total WebSocket connections");
+    metrics_registry.register_counter("ws_messages_total", "Total WebSocket messages");
+
+    let ws_semaphore = Arc::new(tokio::sync::Semaphore::new(limits.max_ws_connections));
+
+    let tracker = tokio_util::task::TaskTracker::new();
+
+    let state = Arc::new(http::AppState {
+        engine,
+        limits: limits.clone(),
+        metrics_registry: Some(metrics_registry.clone()),
+        shutdown,
+        tracker,
+        model_dir,
+        model_info,
+        ws_semaphore,
+    });
+
+    let allow_origins: Vec<axum::http::HeaderValue> = limits
+        .cors_origins
+        .iter()
+        .filter_map(|o| o.parse().ok())
+        .collect();
+
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::list(allow_origins))
+        .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+        .allow_headers(tower_http::cors::Any);
+
+    let mut router = Router::new()
+        .route("/health", axum::routing::get(http::health))
+        .route("/v1/models", axum::routing::get(http::models))
+        .route("/v1/transcribe", axum::routing::post(http::transcribe))
+        .route("/v1/transcribe/batch", axum::routing::post(http::transcribe_batch))
+        .route("/v1/transcribe/stream", axum::routing::post(http::transcribe_stream))
+        .route("/v1/transcribe/stream", axum::routing::get(ws::ws_v1_transcribe_stream))
+        .route("/metrics", axum::routing::get(http::metrics))
+        .route("/stream", axum::routing::get(ws::ws_handler))
+        .layer(DefaultBodyLimit::max(limits.body_limit_bytes))
+        .layer(cors)
+        .layer(TraceLayer::new_for_http())
+        .with_state(state.clone());
+
+    if limits.rate_limit_per_minute > 0 {
+        let limiter = Arc::new(rate_limit::RateLimiter::new(
+            limits.rate_limit_per_minute,
+            limits.rate_limit_burst,
+        ));
+        router = router.layer(axum::middleware::from_fn_with_state(
+            limiter,
+            rate_limit::rate_limit_middleware,
+        ));
+    }
+
+    // Auth middleware runs before rate limiting (outermost).
+    router = router.layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        auth_middleware,
+    ));
+
+    router
+}
+
+/// API key authentication middleware.
+/// If no API key is configured, all requests are allowed.
+pub async fn auth_middleware(
+    State(state): State<Arc<http::AppState>>,
+    req: axum::extract::Request,
+    next: Next,
+) -> Response {
+    if let Some(ref expected_key) = state.limits.api_key {
+        let valid = req
+            .headers()
+            .get("authorization")
+            .and_then(|h| h.to_str().ok())
+            .is_some_and(|s| {
+                s.strip_prefix("Bearer ").is_some_and(|token| token == expected_key)
+            });
+        if !valid {
+            return (
+                StatusCode::UNAUTHORIZED,
+                [(header::CONTENT_TYPE, "application/json")],
+                Json(serde_json::json!({
+                    "error": "Invalid API key",
+                    "code": "invalid_api_key",
+                })),
+            )
+                .into_response();
+        }
+    }
+    next.run(req).await
+}
