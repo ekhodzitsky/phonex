@@ -159,6 +159,7 @@ impl Drop for MetricsGuard<'_> {
         (status = 200, description = "Service is healthy", body = HealthResponse),
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     let _guard = MetricsGuard {
         registry: &state.metrics_registry,
@@ -188,6 +189,7 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> 
         (status = 200, description = "Model information", body = ModelInfoResponse),
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn models(State(state): State<Arc<AppState>>) -> Json<ModelInfoResponse> {
     let _guard = MetricsGuard {
         registry: &state.metrics_registry,
@@ -292,6 +294,7 @@ async fn extract_audio_from_multipart(
         (status = 503, description = "Server busy"),
     )
 )]
+#[tracing::instrument(skip(state, multipart))]
 pub async fn transcribe(
     State(state): State<Arc<AppState>>,
     Query(query): Query<TranscribeQuery>,
@@ -369,6 +372,7 @@ pub async fn transcribe(
 }
 
 /// POST /v1/transcribe/batch — upload multiple audio files, get transcripts for all.
+#[tracing::instrument(skip(state, multipart))]
 pub async fn transcribe_batch(
     State(state): State<Arc<AppState>>,
     Query(query): Query<TranscribeQuery>,
@@ -460,6 +464,7 @@ pub async fn transcribe_batch(
 }
 
 /// POST /v1/transcribe/stream — upload audio via multipart, get SSE stream of partial/final results.
+#[tracing::instrument(skip(state, multipart))]
 pub async fn transcribe_stream(
     State(state): State<Arc<AppState>>,
     Query(query): Query<TranscribeQuery>,
@@ -561,6 +566,7 @@ pub struct ReloadQuery {
     pub model_dir: Option<String>,
 }
 
+#[tracing::instrument(skip(state))]
 pub async fn reload(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ReloadQuery>,

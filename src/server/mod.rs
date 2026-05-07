@@ -18,6 +18,7 @@ use axum::response::{IntoResponse, Json, Response};
 use std::sync::Arc;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
+use tracing::Instrument;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -161,13 +162,29 @@ pub fn app_with_limits(
         ));
     }
 
-    // Auth middleware runs before rate limiting (outermost).
+    // Request ID middleware (outermost).
+    router = router.layer(axum::middleware::from_fn(request_id_middleware));
+
+    // Auth middleware runs before rate limiting.
     router = router.layer(axum::middleware::from_fn_with_state(
         state.clone(),
         auth_middleware,
     ));
 
     router
+}
+
+/// Request ID middleware — attaches a unique request ID to every request.
+/// The ID is propagated via `x-request-id` header (response) and tracing span.
+pub async fn request_id_middleware(
+    req: axum::extract::Request,
+    next: Next,
+) -> Response {
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let span = tracing::info_span!("request", %request_id, method = %req.method(), uri = %req.uri());
+    let mut response = next.run(req).instrument(span).await;
+    response.headers_mut().insert("x-request-id", request_id.parse().unwrap());
+    response
 }
 
 /// API key authentication middleware.

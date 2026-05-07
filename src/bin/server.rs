@@ -96,9 +96,16 @@ fn resolve_model_dir(model_dir: Option<String>, language: Option<Language>) -> S
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+    if std::env::var("PHONEX_LOG_FORMAT").as_deref() == Ok("json") {
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .json()
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .init();
+    }
 
     let args = Args::parse();
     let model_dir = resolve_model_dir(args.model_dir, args.language);
@@ -161,8 +168,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let grpc_addr: SocketAddr = format!("{}:{}", args.bind, grpc_port).parse()?;
         tracing::info!(%grpc_addr, "Starting gRPC server");
         let grpc_svc = server::grpc::PhonexGrpcService::new(engine, info, model_dir);
+        let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
+        health_reporter
+            .set_serving::<server::grpc::pb::transcription_service_server::TranscriptionServiceServer<server::grpc::PhonexGrpcService>>()
+            .await;
         Some(tokio::spawn(async move {
             tonic::transport::Server::builder()
+                .add_service(health_service)
                 .add_service(grpc_svc.into_server())
                 .serve(grpc_addr)
                 .await

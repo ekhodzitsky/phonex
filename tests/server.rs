@@ -113,3 +113,22 @@ async fn test_transcribe_empty_body() {
     // Empty body should return 400 bad request (or 422)
     assert!(response.status().is_client_error());
 }
+
+#[tokio::test]
+async fn test_reload_bad_model_dir() {
+    let (engine, info) = test_engine();
+    let app = phonex::server::app(engine, "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(), info);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/admin/reload?model_dir=/nonexistent")
+                .method("POST")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}

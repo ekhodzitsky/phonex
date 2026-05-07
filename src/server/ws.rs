@@ -18,6 +18,7 @@ pub async fn ws_v1_transcribe_stream(
     ws.on_upgrade(move |socket| handle_v1_stream(socket, state))
 }
 
+#[tracing::instrument(skip(socket, state))]
 async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
     // Enforce max concurrent WebSocket connections.
     let _permit = if state.limits.max_ws_connections > 0 {
@@ -242,6 +243,7 @@ pub async fn ws_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
+#[tracing::instrument(skip(socket, state))]
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     if send_ready_message(&mut socket, &state).await.is_err() {
         return;

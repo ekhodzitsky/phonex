@@ -35,6 +35,7 @@ impl PhonexGrpcService {
 
 #[tonic::async_trait]
 impl TranscriptionService for PhonexGrpcService {
+    #[tracing::instrument(skip(self, request))]
     async fn transcribe(
         &self,
         request: Request<TranscribeRequest>,
@@ -75,6 +76,7 @@ impl TranscriptionService for PhonexGrpcService {
 
     type StreamTranscribeStream = Pin<Box<dyn Stream<Item = Result<StreamTranscriptResponse, Status>> + Send>>;
 
+    #[tracing::instrument(skip(self, request))]
     async fn stream_transcribe(
         &self,
         request: Request<Streaming<StreamAudioRequest>>,
