@@ -10,6 +10,7 @@ use crate::model_config::ModelInfo;
 /// Errors returned by [`Pool::checkout`].
 #[derive(Debug)]
 pub enum PoolError {
+    /// The pool has been closed and can no longer hand out items.
     Closed,
 }
 
@@ -24,6 +25,9 @@ impl std::fmt::Display for PoolError {
 impl std::error::Error for PoolError {}
 
 /// Pool of pre-loaded items of type `T` backed by an MPMC `async-channel`.
+///
+/// Items are checked out asynchronously and automatically returned when the
+/// guard is dropped. Use [`SessionPool`] for the concrete ONNX inference pool.
 pub struct Pool<T> {
     sender: async_channel::Sender<T>,
     receiver: async_channel::Receiver<T>,
@@ -35,8 +39,11 @@ pub type SessionPool = Pool<SessionTriplet>;
 
 /// A set of ONNX sessions for one inference pipeline (encoder + decoder + joiner).
 pub struct SessionTriplet {
+    /// Encoder session (converts audio features to encoder states).
     pub encoder: OfflineEncoder,
+    /// Decoder session (predicts next token from previous tokens).
     pub decoder: SherpaDecoder,
+    /// Joiner session (combines encoder and decoder states for scoring).
     pub joiner: SherpaJoiner,
 }
 
@@ -109,6 +116,9 @@ impl<T> Pool<T> {
 }
 
 /// RAII guard that auto-checks-in an item when dropped.
+///
+/// Derefs to the underlying item for convenient access. Use [`PoolGuard::into_owned`]
+/// to convert into a [`CheckoutGuard`] for `'static` contexts.
 pub struct PoolGuard<'a, T> {
     pool: &'a Pool<T>,
     item: Option<T>,
@@ -158,6 +168,9 @@ impl<T> Drop for PoolGuard<'_, T> {
 }
 
 /// Owned counterpart to [`PoolGuard`] for `'static` contexts.
+///
+/// Holds a clone of the pool's sender so the item can be returned later via
+/// [`OwnedReservation::checkin`].
 pub struct OwnedReservation<T> {
     sender: async_channel::Sender<T>,
 }
@@ -171,6 +184,9 @@ impl<T> OwnedReservation<T> {
 }
 
 /// RAII guard that auto-checks-in an item when dropped — used after [`PoolGuard::into_owned`].
+///
+/// Owns both the pooled item and the reservation needed to return it. Dropping
+/// this guard automatically sends the item back to the pool.
 pub struct CheckoutGuard<T> {
     item: Option<T>,
     reservation: Option<OwnedReservation<T>>,
@@ -253,6 +269,50 @@ mod tests {
             drop(owned);
         }
 
+        assert_eq!(pool.available(), 1);
+    }
+
+    #[test]
+    fn test_pool_exhaustion() {
+        let pool = Pool::new(vec![1i32, 2i32]);
+        assert_eq!(pool.available(), 2);
+
+        let _g1 = pool.try_checkout().unwrap();
+        let _g2 = pool.try_checkout().unwrap();
+        assert_eq!(pool.available(), 0);
+
+        assert!(pool.try_checkout().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_pool_close() {
+        let pool = Pool::new(vec![42i32]);
+        let _guard = pool.try_checkout().unwrap(); // drain the pool
+        pool.close();
+        assert!(matches!(pool.checkout().await, Err(PoolError::Closed)));
+    }
+
+    #[test]
+    fn test_checkout_guard_into_inner() {
+        let pool = Pool::new(vec![42i32]);
+        let guard = pool.try_checkout().unwrap();
+        let owned = guard.into_owned();
+        let (item, reservation) = owned.into_inner();
+        assert_eq!(item, 42);
+        // Manual checkin
+        reservation.checkin(item);
+        assert_eq!(pool.available(), 1);
+    }
+
+    #[test]
+    fn test_pool_guard_drop_checkin() {
+        let pool = Pool::new(vec![42i32]);
+        assert_eq!(pool.available(), 1);
+        {
+            let guard = pool.try_checkout().unwrap();
+            assert_eq!(pool.available(), 0);
+            drop(guard);
+        }
         assert_eq!(pool.available(), 1);
     }
 }

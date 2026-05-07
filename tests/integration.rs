@@ -4,6 +4,15 @@ use phonex::model_config::ModelInfo;
 const MODEL_DIR: &str = "models/sherpa-onnx-zipformer-thai-2024-06-20";
 const STREAMING_EN_DIR: &str = "models/sherpa-onnx-streaming-zipformer-en-2023-06-21";
 
+macro_rules! skip_if_no_models {
+    () => {
+        if !std::path::Path::new(MODEL_DIR).is_dir() {
+            eprintln!("Skipping test: model directory not found");
+            return;
+        }
+    };
+}
+
 fn maybe_resample(samples: Vec<f32>, sample_rate: usize, target_rate: usize) -> Vec<f32> {
     if sample_rate == target_rate {
         samples
@@ -16,6 +25,7 @@ fn maybe_resample(samples: Vec<f32>, sample_rate: usize, target_rate: usize) -> 
 
 #[test]
 fn test_transcribe_0_wav() {
+    skip_if_no_models!();
     let engine = Engine::load(MODEL_DIR).expect("failed to load engine");
     let text = engine
         .transcribe_file(&format!("{}/test_wavs/0.wav", MODEL_DIR))
@@ -35,6 +45,7 @@ fn test_transcribe_0_wav() {
 
 #[test]
 fn test_transcribe_1_wav() {
+    skip_if_no_models!();
     let engine = Engine::load(MODEL_DIR).expect("failed to load engine");
     let text = engine
         .transcribe_file(&format!("{}/test_wavs/1.wav", MODEL_DIR))
@@ -49,6 +60,7 @@ fn test_transcribe_1_wav() {
 
 #[test]
 fn test_transcribe_2_wav() {
+    skip_if_no_models!();
     let engine = Engine::load(MODEL_DIR).expect("failed to load engine");
     let text = engine
         .transcribe_file(&format!("{}/test_wavs/2.wav", MODEL_DIR))
@@ -63,6 +75,7 @@ fn test_transcribe_2_wav() {
 
 #[test]
 fn test_transcribe_batch() {
+    skip_if_no_models!();
     let engine = Engine::load(MODEL_DIR).expect("failed to load engine");
     let (samples0, sr0) =
         phonex::audio::AudioPreprocessor::read_wav(&format!("{}/test_wavs/0.wav", MODEL_DIR))
@@ -102,6 +115,7 @@ fn test_transcribe_batch() {
 
 #[test]
 fn test_transcribe_vad_2_wav() {
+    skip_if_no_models!();
     let engine = Engine::load(MODEL_DIR).expect("failed to load engine");
     let (samples, sample_rate) =
         phonex::audio::AudioPreprocessor::read_wav(&format!("{}/test_wavs/2.wav", MODEL_DIR))

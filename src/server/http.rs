@@ -755,4 +755,21 @@ mod tests {
         let result = validate_model_dir(path);
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_validate_model_dir_path_traversal() {
+        let cases = [
+            "/models/../etc/passwd",
+            "/models/foo/../../etc",
+            "../models",
+            "/models/subdir/..",
+        ];
+        for case in &cases {
+            let result = validate_model_dir(case);
+            assert!(
+                result.is_err(),
+                "expected path traversal rejection for {case}"
+            );
+        }
+    }
 }

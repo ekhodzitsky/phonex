@@ -354,3 +354,61 @@ impl StreamingVad {
         matches!(self.state, VadState::Speech)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::audio::AudioPreprocessor;
+
+    #[test]
+    fn test_vad_config_default() {
+        let config = VadConfig::default();
+        assert_eq!(config.model_path, "models/silero_vad.onnx");
+        assert_eq!(config.speech_threshold, 0.5);
+        assert_eq!(config.min_speech_duration_ms, 250);
+        assert_eq!(config.min_silence_duration_ms, 300);
+        assert_eq!(config.speech_pad_ms, 250);
+    }
+
+    #[test]
+    fn test_vad_segmenter_rejects_nan() {
+        let mut segmenter = VadSegmenter::new("models/silero_vad.onnx").unwrap();
+        let mut samples = vec![0.0f32; 512];
+        samples[10] = f32::NAN;
+        let result = segmenter.segment(&samples);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("NaN") || err.contains("infinite"));
+    }
+
+    #[test]
+    fn test_vad_segmenter_rejects_inf() {
+        let mut segmenter = VadSegmenter::new("models/silero_vad.onnx").unwrap();
+        let mut samples = vec![0.0f32; 512];
+        samples[10] = f32::INFINITY;
+        let result = segmenter.segment(&samples);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("NaN") || err.contains("infinite"));
+    }
+
+    #[test]
+    fn test_streaming_vad_state_machine() {
+        let mut vad = StreamingVad::new("models/silero_vad.onnx").unwrap();
+
+        // All zeros should keep the state machine in Silence.
+        let zeros = vec![0.0f32; 512 * 5];
+        let out = vad.process(&zeros);
+        assert!(out.is_empty());
+        assert_eq!(vad.state, VadState::Silence);
+
+        // Real speech audio should trigger a transition to Speech.
+        let (samples, _sr) = AudioPreprocessor::read_wav(
+            "models/sherpa-onnx-zipformer-thai-2024-06-20/test_wavs/0.wav",
+        )
+        .unwrap();
+        let out = vad.process(&samples);
+        assert!(!out.is_empty());
+        assert_eq!(vad.state, VadState::Speech);
+    }
+}

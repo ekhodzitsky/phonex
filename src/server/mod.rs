@@ -31,17 +31,26 @@ pub(crate) use crate::inference::SUPPORTED_RATES;
 pub(crate) const POOL_RETRY_AFTER_MS: u32 = 30_000;
 pub(crate) const POOL_RETRY_AFTER_SECS: u64 = 30;
 
-/// Runtime limits for the server.
+/// Runtime limits and configuration for the HTTP / WebSocket server.
 #[derive(Debug, Clone)]
 pub struct RuntimeLimits {
+    /// Maximum request body size in bytes.
     pub body_limit_bytes: usize,
+    /// Per-IP rate limit (requests per minute). Zero disables rate limiting.
     pub rate_limit_per_minute: u32,
+    /// Per-IP rate limit burst capacity.
     pub rate_limit_burst: u32,
+    /// Maximum concurrent WebSocket connections.
     pub max_ws_connections: usize,
+    /// Optional API key required for non-admin endpoints.
     pub api_key: Option<String>,
+    /// Optional API key required for admin endpoints (falls back to `api_key`).
     pub admin_api_key: Option<String>,
+    /// Whether to trust `X-Forwarded-For` headers for client IP extraction.
     pub trust_proxy: bool,
+    /// Allowed CORS origins.
     pub cors_origins: Vec<String>,
+    /// WebSocket idle timeout in seconds.
     pub ws_idle_timeout_secs: u64,
 }
 

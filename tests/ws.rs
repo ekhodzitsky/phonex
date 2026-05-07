@@ -10,10 +10,19 @@ use phonex::inference::Engine;
 use phonex::inference::pool::SessionPool;
 use phonex::tokenizer::Tokenizer;
 
+const MODEL_DIR: &str = "models/sherpa-onnx-zipformer-thai-2024-06-20";
+
+macro_rules! skip_if_no_models {
+    () => {
+        if !std::path::Path::new(MODEL_DIR).is_dir() {
+            eprintln!("Skipping test: model directory not found");
+            return;
+        }
+    };
+}
+
 fn test_engine() -> (Arc<Engine>, phonex::model_config::ModelInfo) {
-    let paths =
-        phonex::model_config::discover_model_files("models/sherpa-onnx-zipformer-thai-2024-06-20")
-            .unwrap();
+    let paths = phonex::model_config::discover_model_files(MODEL_DIR).unwrap();
     let tokenizer = Arc::new(
         Tokenizer::from_file(
             paths.tokenizer.to_str().unwrap_or(""),
@@ -45,12 +54,9 @@ fn test_engine() -> (Arc<Engine>, phonex::model_config::ModelInfo) {
 #[tokio::test]
 #[ignore = "requires ONNX model files"]
 async fn test_ws_v1_stream_config_chunk_finalize() {
+    skip_if_no_models!();
     let (engine, info) = test_engine();
-    let app = phonex::server::app(
-        engine,
-        "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
-        info,
-    );
+    let app = phonex::server::app(engine, MODEL_DIR.to_string(), info);
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr: SocketAddr = listener.local_addr().unwrap();

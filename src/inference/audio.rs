@@ -88,7 +88,7 @@ pub fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32
         .collect())
 }
 
-/// Convert a little-endian byte slice to a Vec<f32>.
+/// Convert a little-endian byte slice to a `Vec<f32>`.
 pub fn bytes_to_f32_samples(data: &[u8]) -> Vec<f32> {
     data.chunks_exact(4)
         .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))

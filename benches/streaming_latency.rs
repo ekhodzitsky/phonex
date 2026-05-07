@@ -35,6 +35,14 @@ fn make_chunks(encoder: &StreamingEncoder) -> Vec<Array3<f32>> {
 }
 
 fn bench_streaming_encoder(c: &mut Criterion) {
+    if !std::path::Path::new(STREAMING_MODEL_DIR).is_dir() {
+        eprintln!(
+            "Skipping streaming_encoder benchmark — model directory '{}' not found",
+            STREAMING_MODEL_DIR
+        );
+        return;
+    }
+
     // Discover encoder path
     let paths = phonex::model_config::discover_model_files(STREAMING_MODEL_DIR)
         .expect("failed to discover model files");

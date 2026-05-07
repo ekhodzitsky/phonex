@@ -9,10 +9,19 @@ use phonex::inference::pool::SessionPool;
 use phonex::tokenizer::Tokenizer;
 use std::sync::Arc;
 
+const MODEL_DIR: &str = "models/sherpa-onnx-zipformer-thai-2024-06-20";
+
+macro_rules! skip_if_no_models {
+    () => {
+        if !std::path::Path::new(MODEL_DIR).is_dir() {
+            eprintln!("Skipping test: model directory not found");
+            return;
+        }
+    };
+}
+
 fn test_engine() -> (Arc<Engine>, phonex::model_config::ModelInfo) {
-    let paths =
-        phonex::model_config::discover_model_files("models/sherpa-onnx-zipformer-thai-2024-06-20")
-            .unwrap();
+    let paths = phonex::model_config::discover_model_files(MODEL_DIR).unwrap();
     let tokenizer = Arc::new(
         Tokenizer::from_file(
             paths.tokenizer.to_str().unwrap_or(""),
@@ -43,12 +52,9 @@ fn test_engine() -> (Arc<Engine>, phonex::model_config::ModelInfo) {
 
 #[tokio::test]
 async fn test_health() {
+    skip_if_no_models!();
     let (engine, info) = test_engine();
-    let app = phonex::server::app(
-        engine,
-        "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
-        info,
-    );
+    let app = phonex::server::app(engine, MODEL_DIR.to_string(), info);
     let response = app
         .oneshot(
             Request::builder()
@@ -70,12 +76,9 @@ async fn test_health() {
 
 #[tokio::test]
 async fn test_models() {
+    skip_if_no_models!();
     let (engine, info) = test_engine();
-    let app = phonex::server::app(
-        engine,
-        "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
-        info,
-    );
+    let app = phonex::server::app(engine, MODEL_DIR.to_string(), info);
     let response = app
         .oneshot(
             Request::builder()
@@ -98,12 +101,9 @@ async fn test_models() {
 
 #[tokio::test]
 async fn test_metrics() {
+    skip_if_no_models!();
     let (engine, info) = test_engine();
-    let app = phonex::server::app(
-        engine,
-        "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
-        info,
-    );
+    let app = phonex::server::app(engine, MODEL_DIR.to_string(), info);
     let response = app
         .oneshot(
             Request::builder()
@@ -125,12 +125,9 @@ async fn test_metrics() {
 
 #[tokio::test]
 async fn test_transcribe_empty_body() {
+    skip_if_no_models!();
     let (engine, info) = test_engine();
-    let app = phonex::server::app(
-        engine,
-        "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
-        info,
-    );
+    let app = phonex::server::app(engine, MODEL_DIR.to_string(), info);
 
     let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
     let body = format!(
@@ -158,12 +155,9 @@ async fn test_transcribe_empty_body() {
 
 #[tokio::test]
 async fn test_reload_bad_model_dir() {
+    skip_if_no_models!();
     let (engine, info) = test_engine();
-    let app = phonex::server::app(
-        engine,
-        "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
-        info,
-    );
+    let app = phonex::server::app(engine, MODEL_DIR.to_string(), info);
 
     let response = app
         .oneshot(
@@ -177,4 +171,137 @@ async fn test_reload_bad_model_dir() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_transcribe_unauthorized() {
+    skip_if_no_models!();
+    let (engine, info) = test_engine();
+    let limits = phonex::server::RuntimeLimits {
+        api_key: Some("secret".into()),
+        ..phonex::server::RuntimeLimits::default()
+    };
+    let app = phonex::server::app_with_limits(
+        engine,
+        MODEL_DIR.to_string(),
+        info,
+        limits,
+        tokio_util::sync::CancellationToken::new(),
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/transcribe")
+                .method("POST")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_transcribe_authorized() {
+    skip_if_no_models!();
+    let (engine, info) = test_engine();
+    let limits = phonex::server::RuntimeLimits {
+        api_key: Some("secret".into()),
+        ..phonex::server::RuntimeLimits::default()
+    };
+    let app = phonex::server::app_with_limits(
+        engine,
+        MODEL_DIR.to_string(),
+        info,
+        limits,
+        tokio_util::sync::CancellationToken::new(),
+    );
+
+    let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+    let body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"audio\"; filename=\"test.raw\"\r\n\r\n\r\n--{boundary}--\r\n"
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/transcribe")
+                .method("POST")
+                .header("authorization", "Bearer secret")
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Should not be 401; empty body yields 400/422.
+    assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_admin_reload_unauthorized() {
+    skip_if_no_models!();
+    let (engine, info) = test_engine();
+    let limits = phonex::server::RuntimeLimits {
+        admin_api_key: Some("admin_secret".into()),
+        ..phonex::server::RuntimeLimits::default()
+    };
+    let app = phonex::server::app_with_limits(
+        engine,
+        MODEL_DIR.to_string(),
+        info,
+        limits,
+        tokio_util::sync::CancellationToken::new(),
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/admin/reload")
+                .method("POST")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_cors_preflight() {
+    skip_if_no_models!();
+    let (engine, info) = test_engine();
+    let app = phonex::server::app(engine, MODEL_DIR.to_string(), info);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/transcribe")
+                .method("OPTIONS")
+                .header("origin", "http://localhost:3000")
+                .header("access-control-request-method", "POST")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        response.status() == StatusCode::OK || response.status() == StatusCode::NO_CONTENT,
+        "expected 200 or 204, got {:?}",
+        response.status()
+    );
+    assert!(
+        response
+            .headers()
+            .contains_key("access-control-allow-origin"),
+        "missing Access-Control-Allow-Origin header"
+    );
 }

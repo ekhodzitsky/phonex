@@ -100,6 +100,31 @@ def test_stream_flush_null():
     print("✓ phonex_stream_flush(null) -> NULL")
 
 
+def test_engine_new_free_cycle():
+    """Create an engine with a valid model dir and free it successfully."""
+    lib = load_lib()
+    lib.phonex_engine_new.restype = ctypes.c_void_p
+    model_dir = str(Path(__file__).parent.parent / "models" / "sherpa-onnx-zipformer-thai-2024-06-20")
+    result = lib.phonex_engine_new(model_dir.encode("utf-8"))
+    assert result, f"expected non-NULL engine for valid model dir, got {result}"
+    lib.phonex_engine_free(result)
+    print("✓ phonex_engine_new(valid) -> engine -> phonex_engine_free(engine) -> no crash")
+
+
+def test_double_free_engine():
+    """Calling phonex_engine_free twice on the same pointer must be a no-op."""
+    lib = load_lib()
+    lib.phonex_engine_new.restype = ctypes.c_void_p
+    model_dir = str(Path(__file__).parent.parent / "models" / "sherpa-onnx-zipformer-thai-2024-06-20")
+    result = lib.phonex_engine_new(model_dir.encode("utf-8"))
+    assert result, f"expected non-NULL engine for valid model dir, got {result}"
+    # First free should deallocate.
+    lib.phonex_engine_free(result)
+    # Second free must be a no-op (LIVE_ENGINES registry prevents double-free).
+    lib.phonex_engine_free(result)
+    print("✓ phonex_engine_free(engine); phonex_engine_free(engine) -> no crash")
+
+
 def main():
     print("phonex FFI smoke tests")
     print("-" * 40)
@@ -109,6 +134,8 @@ def main():
     test_stream_new_null()
     test_stream_process_chunk_null()
     test_stream_flush_null()
+    test_engine_new_free_cycle()
+    test_double_free_engine()
     print("-" * 40)
     print("All FFI smoke tests passed.")
     return 0

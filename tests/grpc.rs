@@ -12,11 +12,19 @@ mod grpc_tests {
     use phonex::inference::pool::SessionPool;
     use phonex::tokenizer::Tokenizer;
 
+    const MODEL_DIR: &str = "models/sherpa-onnx-zipformer-thai-2024-06-20";
+
+    macro_rules! skip_if_no_models {
+        () => {
+            if !std::path::Path::new(MODEL_DIR).is_dir() {
+                eprintln!("Skipping test: model directory not found");
+                return;
+            }
+        };
+    }
+
     fn test_engine() -> (Arc<Engine>, phonex::model_config::ModelInfo) {
-        let paths = phonex::model_config::discover_model_files(
-            "models/sherpa-onnx-zipformer-thai-2024-06-20",
-        )
-        .unwrap();
+        let paths = phonex::model_config::discover_model_files(MODEL_DIR).unwrap();
         let tokenizer = Arc::new(
             Tokenizer::from_file(
                 paths.tokenizer.to_str().unwrap_or(""),
@@ -47,11 +55,12 @@ mod grpc_tests {
 
     #[tokio::test]
     async fn test_grpc_health_check() {
+        skip_if_no_models!();
         let (engine, info) = test_engine();
         let grpc_svc = phonex::server::grpc::PhonexGrpcService::new(
             engine,
             info,
-            "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
+            MODEL_DIR.to_string(),
             100,
             None,
         );
