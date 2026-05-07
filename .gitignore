@@ -33,3 +33,10 @@ recon/
 # Config & secrets
 phonex.yaml
 tls/
+
+# Python
+*.egg-info/
+dist/
+build/
+__pycache__/
+.mypy_cache/

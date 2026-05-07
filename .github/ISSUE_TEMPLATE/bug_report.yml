@@ -1,0 +1,53 @@
+name: Bug Report
+description: Report a bug in phonex
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug!
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: To Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Run 'phonex serve ...'
+        2. Send request to '...'
+        3. See error
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version of phonex are you running?
+      placeholder: e.g., 0.2.5
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux (x86_64)
+        - Linux (ARM64)
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows
+        - Docker
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: If applicable, paste relevant logs or error messages.
+      render: shell

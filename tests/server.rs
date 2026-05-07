@@ -187,6 +187,7 @@ async fn test_transcribe_unauthorized() {
         info,
         limits,
         tokio_util::sync::CancellationToken::new(),
+        Arc::new(std::sync::atomic::AtomicBool::new(true)),
     );
 
     let response = app
@@ -217,6 +218,7 @@ async fn test_transcribe_authorized() {
         info,
         limits,
         tokio_util::sync::CancellationToken::new(),
+        Arc::new(std::sync::atomic::AtomicBool::new(true)),
     );
 
     let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
@@ -258,6 +260,7 @@ async fn test_admin_reload_unauthorized() {
         info,
         limits,
         tokio_util::sync::CancellationToken::new(),
+        Arc::new(std::sync::atomic::AtomicBool::new(true)),
     );
 
     let response = app

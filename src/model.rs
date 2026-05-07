@@ -227,6 +227,7 @@ async fn async_download(url: &str, dest: &Path) -> crate::Result<()> {
     let pb = indicatif::ProgressBar::new(total_size);
     pb.set_style(
         indicatif::ProgressStyle::default_bar()
+            // SAFETY: template string is a compile-time constant known to be valid.
             .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
             .unwrap()
             .progress_chars("#>-"),

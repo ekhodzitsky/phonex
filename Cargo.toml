@@ -20,6 +20,7 @@ tls = ["server", "dep:axum-server", "dep:rustls-pemfile"]
 coreml = ["ort/coreml"]
 cuda = ["ort/cuda"]
 ffi = ["ort/nnapi"]
+python = ["dep:pyo3", "ffi"]
 # Enable benchmarks that load real ONNX models (requires model files on disk).
 bench-with-model = []
 
@@ -128,6 +129,9 @@ realfft = "3"
 
 # Speaker diarization
 polyvoice = { version = "0.5", features = ["onnx"], optional = true }
+
+# Python bindings
+pyo3 = { version = "0.24", features = ["extension-module", "abi3-py39"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"

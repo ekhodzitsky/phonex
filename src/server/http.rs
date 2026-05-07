@@ -10,6 +10,7 @@ use futures_util::StreamExt;
 use futures_util::stream::Stream;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use super::metrics::MetricsRegistry;
 use super::{POOL_RETRY_AFTER_MS, POOL_RETRY_AFTER_SECS, RuntimeLimits};
@@ -25,6 +26,7 @@ pub struct AppState {
     pub model_dir: Arc<tokio::sync::RwLock<String>>,
     pub model_info: Arc<tokio::sync::RwLock<crate::model_config::ModelInfo>>,
     pub ws_semaphore: Arc<tokio::sync::Semaphore>,
+    pub model_loaded: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// GET /metrics — Prometheus text-format exposition.
@@ -56,6 +58,7 @@ pub struct HealthResponse {
     pub status: String,
     pub model: String,
     pub version: String,
+    pub model_loaded: bool,
 }
 
 /// Model info response.
@@ -156,10 +159,11 @@ impl Drop for MetricsGuard<'_> {
     path = "/health",
     responses(
         (status = 200, description = "Service is healthy", body = HealthResponse),
+        (status = 503, description = "Model is loading", body = HealthResponse),
     )
 )]
 #[tracing::instrument(level = "trace", skip(state))]
-pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
+pub async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let _guard = MetricsGuard {
         registry: &state.metrics_registry,
         method: "GET",
@@ -168,16 +172,23 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> 
     };
     let engine = state.engine.read().await;
     let model_info = state.model_info.read().await;
-    let status = if engine.pool.available() > 0 || engine.pool.total() == 0 {
-        "ok"
+    let model_loaded = state.model_loaded.load(Ordering::Relaxed);
+    let (status, code) = if model_loaded {
+        if engine.pool.available() > 0 || engine.pool.total() == 0 {
+            ("ok", StatusCode::OK)
+        } else {
+            ("degraded", StatusCode::OK)
+        }
     } else {
-        "degraded"
+        ("loading", StatusCode::SERVICE_UNAVAILABLE)
     };
-    Json(HealthResponse {
+    let response = Json(HealthResponse {
         status: status.into(),
         model: model_info.model_id.clone(),
         version: env!("CARGO_PKG_VERSION").into(),
-    })
+        model_loaded,
+    });
+    (code, response)
 }
 
 /// GET /v1/models — list loaded models and capabilities.
@@ -718,10 +729,12 @@ pub async fn reload(
         "degraded"
     };
 
+    let model_loaded = state.model_loaded.load(Ordering::Relaxed);
     Ok(Json(HealthResponse {
         status: status.into(),
         model: model_info.model_id.clone(),
         version: env!("CARGO_PKG_VERSION").into(),
+        model_loaded,
     }))
 }
 

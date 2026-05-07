@@ -28,6 +28,9 @@ pub mod vad;
 #[cfg(feature = "ffi")]
 pub mod ffi;
 
+#[cfg(feature = "python")]
+pub mod python;
+
 pub use error::{Result, SiamError};
 pub use inference::Engine;
 pub use streaming_decoder::DecodeToken;

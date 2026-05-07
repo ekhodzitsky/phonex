@@ -278,6 +278,8 @@ fn run_server(
 
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
         let info = ModelInfo::from_model_dir(model_dir)?;
         let paths = phonex::model_config::discover_model_files(model_dir)?;
 
@@ -313,13 +315,17 @@ fn run_server(
         tracing::info!(%addr, "Starting server");
 
         let shutdown = tokio_util::sync::CancellationToken::new();
+        let model_loaded = Arc::new(AtomicBool::new(false));
         let app = server::app_with_limits(
             engine,
             model_dir.to_string(),
             info,
             server::RuntimeLimits::default(),
             shutdown.clone(),
+            model_loaded.clone(),
         );
+
+        model_loaded.store(true, Ordering::Release);
 
         #[cfg(feature = "tls")]
         if let Some(ref tls) = config.tls {

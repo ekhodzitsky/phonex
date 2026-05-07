@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-05-07
+
+### Security
+- Path traversal validation for `POST /v1/admin/reload` (`validate_model_dir`).
+- Admin API key auth (`admin_api_key`) for `/v1/admin/reload` and `/metrics`.
+- Rate limiting `trust_proxy` flag (disabled by default) to prevent IP spoofing.
+- gRPC `Authorization: Bearer` enforcement and 500 MB body cap.
+- CORS explicit `allow_headers` whitelist (`Content-Type`, `Authorization`, `X-Request-Id`).
+- SHA-256 infrastructure for model verification.
+
+### Fixed
+- All `cargo fmt` and `cargo clippy` errors resolved across 40 files.
+- `result_large_err` and `large_enum_variant` clippy lints fixed (box large variants).
+- `derivable_impls` fixed: `PhonexConfig` and `AuthConfig` now derive `Default`.
+- FFI `missing_safety_doc` and `nonminimal_bool` lints fixed.
+
+### Added
+- **15 new unit and regression tests** — pool exhaustion, pool close, guard drop, auth bypass, CORS, path traversal, VAD NaN/inf rejection, error display.
+- **5 benchmarks** — pool cycle, chunked latency, WS streaming latency, streaming encoder latency, audio preprocessor latency (all run without ONNX models via mocks).
+- **FFI smoke tests** (`tests/ffi_smoke.py`) — double-free safety and new→free cycle.
+- **rustdoc coverage** — zero warnings; public API items now have doc comments.
+- **CI safety** — all integration tests skip gracefully when ONNX model files are absent.
+- **cargo-deny** — `.cargo/deny.toml` with allowed licenses and ignored advisories.
+
 ## [0.2.4] - 2026-05-05
 
 ### Security

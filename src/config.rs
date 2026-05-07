@@ -74,6 +74,18 @@ pub struct LimitsConfig {
     pub ws_idle_timeout_secs: u64,
     #[serde(default)]
     pub trust_proxy: bool,
+    #[serde(default = "default_max_ws_message_size_bytes")]
+    pub max_ws_message_size_bytes: usize,
+    #[serde(default = "default_max_ws_audio_buffer_seconds")]
+    pub max_ws_audio_buffer_seconds: u64,
+}
+
+fn default_max_ws_message_size_bytes() -> usize {
+    10 * 1024 * 1024
+}
+
+fn default_max_ws_audio_buffer_seconds() -> u64 {
+    30
 }
 
 impl Default for LimitsConfig {
@@ -84,6 +96,8 @@ impl Default for LimitsConfig {
             max_ws_connections: 100,
             ws_idle_timeout_secs: 60,
             trust_proxy: false,
+            max_ws_message_size_bytes: default_max_ws_message_size_bytes(),
+            max_ws_audio_buffer_seconds: default_max_ws_audio_buffer_seconds(),
         }
     }
 }

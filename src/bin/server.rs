@@ -2,6 +2,7 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use clap::{Parser, ValueEnum};
 use tracing_subscriber::EnvFilter;
@@ -159,6 +160,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         triplets.push(SessionTriplet::from_model_dir(&model_dir, &info)?);
     }
 
+    let model_loaded = Arc::new(AtomicBool::new(false));
+
     let pool = SessionPool::new(triplets);
     let engine = Arc::new(
         Engine::new(pool, tokenizer, info.clone()).with_vad(
@@ -169,6 +172,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .as_str(),
         ),
     );
+
+    model_loaded.store(true, Ordering::Release);
 
     let addr: SocketAddr = format!("{}:{}", args.bind, args.port).parse()?;
     tracing::info!(%addr, "Starting HTTP server");
@@ -191,6 +196,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info.clone(),
         limits.clone(),
         shutdown.clone(),
+        model_loaded.clone(),
     );
 
     let shutdown_http = shutdown.clone();

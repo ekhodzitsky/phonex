@@ -124,6 +124,8 @@ impl AudioPreprocessor {
                 .map(|(s, w)| s * w)
                 .collect();
             frame.resize(self.n_fft, 0.0);
+            // SAFETY: `frame` is resized to exactly `n_fft` and `spectrum` is
+            // allocated with `fft.make_output_vec()`, so lengths always match.
             fft.process(&mut frame, &mut spectrum).unwrap();
             for (j, c) in spectrum.iter().enumerate() {
                 stft[[j, i]] = c.norm();

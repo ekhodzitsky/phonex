@@ -1,0 +1,32 @@
+name: Security Vulnerability
+description: Report a security vulnerability in phonex
+title: "[SECURITY] "
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not report security vulnerabilities through public GitHub issues.**
+
+        Please see our [Security Policy](../SECURITY.md) for responsible disclosure.
+
+        - Email: e@khodzitsky.ru
+        - GitHub Security Advisory: https://github.com/ekhodzitsky/phonex/security/advisories
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the vulnerability (this will be handled privately).
+    validations:
+      required: true
+  - type: input
+    id: impact
+    attributes:
+      label: Impact
+      description: What is the potential impact?
+      placeholder: e.g., Remote code execution, DoS, information disclosure
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Steps to reproduce the vulnerability.

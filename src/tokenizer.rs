@@ -29,7 +29,8 @@ impl Tokenizer {
                 }
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() >= 2
-                    && let Ok(id) = parts.last().unwrap().parse::<u32>()
+                    && let Some(last) = parts.last()
+                    && let Ok(id) = last.parse::<u32>()
                 {
                     let token = parts[..parts.len() - 1].join(" ");
                     token_map.insert(id, token);

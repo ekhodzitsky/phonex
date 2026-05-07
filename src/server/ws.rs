@@ -1,7 +1,8 @@
 //! WebSocket handler for real-time streaming transcription.
 
 use axum::extract::State;
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::ws::close_code;
+use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::response::Response;
 use futures_util::StreamExt;
 use std::sync::Arc;
@@ -77,7 +78,8 @@ pub async fn ws_v1_transcribe_stream(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
 ) -> Response {
-    ws.on_upgrade(move |socket| handle_v1_stream(socket, state))
+    ws.max_message_size(state.limits.max_ws_message_size_bytes)
+        .on_upgrade(move |socket| handle_v1_stream(socket, state))
 }
 
 #[tracing::instrument(skip(socket, state))]
@@ -156,7 +158,7 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
 
     let mut flushed = false;
     let mut pending_samples: usize = 0;
-    const MAX_PENDING_SAMPLES: usize = 480_000; // 30 seconds at 16kHz
+    let max_pending_samples = state.limits.max_ws_audio_buffer_seconds as usize * 16000;
 
     loop {
         if state.shutdown.is_cancelled() {
@@ -170,7 +172,18 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
         .await
         {
             Ok(Some(Ok(msg))) => msg,
-            Ok(Some(Err(_)) | None) => break,
+            Ok(Some(Err(e))) => {
+                if e.to_string().contains("Message too long") {
+                    let _ = socket
+                        .send(Message::Close(Some(CloseFrame {
+                            code: close_code::SIZE,
+                            reason: axum::extract::ws::Utf8Bytes::from_static("Message too large"),
+                        })))
+                        .await;
+                }
+                break;
+            }
+            Ok(None) => break,
             Err(_) => break,
         };
 
@@ -189,7 +202,7 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
                 };
 
                 pending_samples += samples.len();
-                if pending_samples > MAX_PENDING_SAMPLES {
+                if pending_samples > max_pending_samples {
                     let _ =
                         send_error(&mut socket, "Audio buffer full", "backpressure", Some(5000))
                             .await;
@@ -320,7 +333,8 @@ fn bytes_to_f32_samples(data: &[u8]) -> Result<Vec<f32>, &'static str> {
 // Keep the existing /stream handler below ...
 
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+    ws.max_message_size(state.limits.max_ws_message_size_bytes)
+        .on_upgrade(move |socket| handle_socket(socket, state))
 }
 
 #[tracing::instrument(skip(socket, state))]
@@ -357,7 +371,18 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         .await
         {
             Ok(Some(Ok(msg))) => msg,
-            Ok(Some(Err(_)) | None) => break,
+            Ok(Some(Err(e))) => {
+                if e.to_string().contains("Message too long") {
+                    let _ = socket
+                        .send(Message::Close(Some(CloseFrame {
+                            code: close_code::SIZE,
+                            reason: axum::extract::ws::Utf8Bytes::from_static("Message too large"),
+                        })))
+                        .await;
+                }
+                break;
+            }
+            Ok(None) => break,
             Err(_) => break,
         };
 

@@ -16,6 +16,7 @@ use axum::http::{StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Json, Response};
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::Instrument;
@@ -52,6 +53,10 @@ pub struct RuntimeLimits {
     pub cors_origins: Vec<String>,
     /// WebSocket idle timeout in seconds.
     pub ws_idle_timeout_secs: u64,
+    /// Maximum WebSocket incoming message size in bytes.
+    pub max_ws_message_size_bytes: usize,
+    /// Maximum WebSocket audio buffer duration in seconds.
+    pub max_ws_audio_buffer_seconds: u64,
 }
 
 impl Default for RuntimeLimits {
@@ -69,6 +74,8 @@ impl Default for RuntimeLimits {
                 "http://localhost:5173".into(),
             ],
             ws_idle_timeout_secs: 60,
+            max_ws_message_size_bytes: 10 * 1024 * 1024, // 10 MB
+            max_ws_audio_buffer_seconds: 30,
         }
     }
 }
@@ -98,6 +105,7 @@ pub fn app(
         model_info,
         RuntimeLimits::default(),
         tokio_util::sync::CancellationToken::new(),
+        Arc::new(AtomicBool::new(true)),
     )
 }
 
@@ -108,6 +116,7 @@ pub fn app_with_limits(
     model_info: crate::model_config::ModelInfo,
     limits: RuntimeLimits,
     shutdown: tokio_util::sync::CancellationToken,
+    model_loaded: Arc<AtomicBool>,
 ) -> Router {
     let metrics_registry = Arc::new(metrics::MetricsRegistry::new());
     metrics_registry.register_counter("requests_total", "Total HTTP requests");
@@ -132,6 +141,7 @@ pub fn app_with_limits(
         model_dir: Arc::new(tokio::sync::RwLock::new(model_dir)),
         model_info: Arc::new(tokio::sync::RwLock::new(model_info)),
         ws_semaphore,
+        model_loaded,
     });
 
     let allow_origins: Vec<axum::http::HeaderValue> = limits
@@ -222,6 +232,8 @@ pub async fn request_id_middleware(req: axum::extract::Request, next: Next) -> R
     let span =
         tracing::info_span!("request", %request_id, method = %req.method(), uri = %req.uri());
     let mut response = next.run(req).instrument(span).await;
+    // SAFETY: UUID v4 strings only contain hex digits and dashes, which are
+    // always valid HTTP header characters.
     response
         .headers_mut()
         .insert("x-request-id", request_id.parse().unwrap());

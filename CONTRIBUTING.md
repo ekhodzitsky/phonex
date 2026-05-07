@@ -1,131 +1,72 @@
 # Contributing to phonex
 
-Thank you for your interest in contributing! This document will help you get started.
+Thank you for considering contributing to phonex! This document outlines the process and guidelines for contributing.
 
-## Development setup
+## Getting Started
 
-### Prerequisites
+1. Fork the repository on GitHub.
+2. Clone your fork locally.
+3. Ensure you have Rust 1.75+ and ONNX Runtime installed.
 
-- Rust 1.93+ (install via [rustup](https://rustup.rs/))
-- ONNX Runtime (macOS: `brew install onnxruntime`, Linux: see Dockerfile)
-- Git LFS (if working with large test audio files)
-
-### Environment variables
+## Development Setup
 
 ```bash
-export ORT_PREFER_DYNAMIC_LINK=1
-export ORT_LIB_PATH=/opt/homebrew/Cellar/onnxruntime/1.25.1/lib  # macOS
-export DYLD_LIBRARY_PATH=$ORT_LIB_PATH                            # macOS
+# Clone your fork
+git clone https://github.com/<your-username>/phonex.git
+cd phonex
+
+# Build
+cargo build --all-features
+
+# Run tests
+cargo test --all-features
+
+# Run clippy and fmt
+cargo fmt -- --check
+cargo clippy --all-features -- -D warnings
+
+# Run benchmarks (mock mode — no ONNX models required)
+cargo bench
 ```
 
-### Download models for testing
+## Making Changes
 
-```bash
-cd models
+1. Create a new branch: `git checkout -b feature/your-feature-name`
+2. Make your changes.
+3. Add tests for any new functionality.
+4. Update `CHANGELOG.md` under the `[Unreleased]` section.
+5. Ensure all tests pass and clippy is clean.
 
-# Thai model (offline)
-wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-thai-2024-06-20.tar.bz2
-tar xf sherpa-onnx-zipformer-thai-2024-06-20.tar.bz2
+## Code Style
 
-# English streaming model
-wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-2023-06-21.tar.bz2
-tar xf sherpa-onnx-streaming-zipformer-en-2023-06-21.tar.bz2
-```
+- Format code with `cargo fmt`.
+- Address all `cargo clippy --all-features -- -D warnings` lints.
+- Write doc comments for all public API items.
+- Avoid `unwrap()` in production code paths; use `?` or `match` instead.
+- Add `// SAFETY:` comments for any `unsafe` blocks.
 
-### Build
+## Testing
 
-```bash
-cargo build --release
-```
+- Unit tests go in `src/<module>/mod.rs` inside `#[cfg(test)]` modules.
+- Integration tests go in `tests/`.
+- Tests that require ONNX model files should be marked with `#[ignore = "..."]`.
+- Run `cargo test --all-features` before submitting.
 
-### Run tests
+## Security
 
-```bash
-# Unit tests (fast, no model load)
-cargo test --lib
+If you discover a security vulnerability, please follow our [Security Policy](SECURITY.md) instead of opening a public issue.
 
-# Integration tests (require models)
-cargo test --test integration
-cargo test --test server_inference -- --ignored
+## Pull Request Process
 
-# HTTP server tests (fast, no model load)
-cargo test --test server
+1. Push your branch to your fork.
+2. Open a Pull Request against `main`.
+3. Ensure CI passes (fmt, clippy, test, audit, cargo-deny).
+4. Request review from maintainers.
+5. Once approved, your PR will be squash-merged.
 
-# All tests
-cargo test --all-targets
-```
+## Release Process
 
-### Lint and format
-
-```bash
-cargo fmt
-cargo clippy --all-targets --all-features
-```
-
-## Project structure
-
-```
-src/
-  main.rs              # phonex CLI (transcribe, serve)
-  lib.rs               # Library exports
-  bin/
-    server.rs          # Standalone HTTP/WebSocket server
-    streaming.rs       # Real-time streaming CLI
-  inference/
-    engine.rs          # Offline inference engine
-    features.rs        # FBANK feature extraction
-    pool.rs            # ONNX session pool
-    decode.rs          # Greedy RNNT decoder
-    tokenizer.rs       # BPE tokenization
-    streaming.rs       # Streaming inference logic
-  server/
-    http.rs            # HTTP handlers (REST API)
-    ws.rs              # WebSocket handlers
-    mod.rs             # Router builder
-    metrics.rs         # Prometheus metrics
-    rate_limit.rs      # Token bucket rate limiter
-  streaming_encoder.rs # Stateful Zipformer encoder
-  streaming_decoder.rs # Streaming decoder
-  streaming_pipeline.rs # End-to-end streaming pipeline
-  vad.rs               # Silero VAD + streaming VAD
-  model_config.rs      # Auto-detect model parameters
-```
-
-## How to contribute
-
-1. **Fork** the repository
-2. **Create a branch** (`git checkout -b feature/my-feature`)
-3. **Make your changes** with clear commit messages
-4. **Run tests and clippy** (`cargo test --all-targets && cargo clippy --all-targets --all-features`)
-5. **Run security checks** (`cargo audit && cargo deny check`) before opening a PR
-6. **Open a Pull Request** with a clear description
-
-## Reporting bugs
-
-Please include:
-- OS and architecture (e.g., macOS ARM64, Ubuntu x64)
-- Rust version (`rustc --version`)
-- ONNX Runtime version
-- Model name and size
-- Steps to reproduce
-- Expected vs actual behavior
-- Logs (with `RUST_LOG=debug` if possible)
-
-## Adding a new language model
-
-phonex auto-detects model parameters from ONNX metadata. To add a new language:
-
-1. Download a Sherpa-ONNX Zipformer-transducer model
-2. Place `encoder*.onnx`, `decoder*.onnx`, `joiner*.onnx`, `*.model`, `tokens.txt` in a directory
-3. Run `phonex transcribe audio.wav --model-dir models/my-model`
-4. If auto-detection fails, open an issue with the model link
-
-## Code style
-
-- Follow `rustfmt` and `clippy` without warnings
-- Use `tracing` for logging, not `println!`
-- Prefer `Result` over panics in library code
-- Document public APIs with rustdoc comments
+Maintainers handle releases. Do not bump version numbers in PRs.
 
 ## License
 

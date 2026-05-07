@@ -27,6 +27,14 @@ jobs:
             os: macos-latest
             onnx_arch: none
             onnx_dir: ""
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            onnx_arch: x64
+            onnx_dir: onnxruntime-win-x64-1.25.1
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            onnx_arch: aarch64
+            onnx_dir: onnxruntime-linux-aarch64-1.25.1
 
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +46,12 @@ jobs:
 
       - name: Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
+
+      - name: Install cross-compilation toolchain (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Install ONNX Runtime (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -57,32 +71,55 @@ jobs:
           echo "DYLD_LIBRARY_PATH=$(brew --prefix onnxruntime)/lib" >> $GITHUB_ENV
           echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
 
+      - name: Install ONNX Runtime (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          curl -fsSL https://github.com/microsoft/onnxruntime/releases/download/v1.25.1/${{ matrix.onnx_dir }}.zip -o onnxruntime.zip
+          unzip -q onnxruntime.zip
+          mv ${{ matrix.onnx_dir }} /c/onnxruntime
+          echo "ORT_LIB_PATH=/c/onnxruntime/lib" >> $GITHUB_ENV
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+
       - name: Build release binaries
         run: |
           cargo build --release --target ${{ matrix.target }} --bin phonex --bin server --bin streaming
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - name: Build FFI library
         run: |
           cargo build --release --target ${{ matrix.target }} --features ffi --no-default-features
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - name: Package binaries
+        shell: bash
         run: |
           mkdir -p phonex-${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/phonex phonex-${{ matrix.target }}/ || true
-          cp target/${{ matrix.target }}/release/server phonex-${{ matrix.target }}/ || true
-          cp target/${{ matrix.target }}/release/streaming phonex-${{ matrix.target }}/ || true
-          if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            cp target/${{ matrix.target }}/release/libphonex.dylib phonex-${{ matrix.target }}/ || true
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp target/${{ matrix.target }}/release/phonex.exe phonex-${{ matrix.target }}/ || true
+            cp target/${{ matrix.target }}/release/server.exe phonex-${{ matrix.target }}/ || true
+            cp target/${{ matrix.target }}/release/streaming.exe phonex-${{ matrix.target }}/ || true
+            cp target/${{ matrix.target }}/release/phonex.dll phonex-${{ matrix.target }}/ || true
+            zip -r phonex-${{ matrix.target }}.zip phonex-${{ matrix.target }}
           else
-            cp target/${{ matrix.target }}/release/libphonex.so phonex-${{ matrix.target }}/ || true
+            cp target/${{ matrix.target }}/release/phonex phonex-${{ matrix.target }}/ || true
+            cp target/${{ matrix.target }}/release/server phonex-${{ matrix.target }}/ || true
+            cp target/${{ matrix.target }}/release/streaming phonex-${{ matrix.target }}/ || true
+            if [ "${{ matrix.os }}" = "macos-latest" ]; then
+              cp target/${{ matrix.target }}/release/libphonex.dylib phonex-${{ matrix.target }}/ || true
+            else
+              cp target/${{ matrix.target }}/release/libphonex.so phonex-${{ matrix.target }}/ || true
+            fi
+            tar czf phonex-${{ matrix.target }}.tar.gz phonex-${{ matrix.target }}
           fi
-          tar czf phonex-${{ matrix.target }}.tar.gz phonex-${{ matrix.target }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: phonex-${{ matrix.target }}
-          path: phonex-${{ matrix.target }}.tar.gz
+          path: phonex-${{ matrix.target }}.${{ matrix.os == 'windows-latest' && 'zip' || 'tar.gz' }}
 
   create-release:
     name: Create GitHub Release
@@ -99,7 +136,9 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*.tar.gz
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
           generate_release_notes: true
 
   publish-crate:
