@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package phonex;
+
+// Transcription service
+service TranscriptionService {
+  // Unary transcription of a complete audio file
+  rpc Transcribe (TranscribeRequest) returns (TranscribeResponse);
+
+  // Bidirectional streaming transcription
+  rpc StreamTranscribe (stream StreamAudioRequest) returns (stream StreamTranscriptResponse);
+}
+
+message TranscribeRequest {
+  bytes audio_data = 1;
+  string format = 2;  // "wav", "mp3", "ogg", etc.
+  int32 sample_rate = 3;
+  bool enable_vad = 4;
+}
+
+message WordInfo {
+  string word = 1;
+  double start = 2;
+  double end = 3;
+  float confidence = 4;
+}
+
+message TranscribeResponse {
+  string text = 1;
+  repeated WordInfo words = 2;
+  double duration_seconds = 3;
+  string model_id = 4;
+}
+
+message StreamAudioRequest {
+  oneof payload {
+    StreamConfig config = 1;
+    bytes audio_chunk = 2;
+    bool finalize = 3;
+  }
+}
+
+message StreamConfig {
+  int32 sample_rate = 1;
+  bool enable_vad = 2;
+}
+
+message StreamTranscriptResponse {
+  oneof result {
+    string partial_text = 1;
+    string final_text = 2;
+    WordInfo word = 3;
+  }
+  double timestamp = 4;
+  bool is_final = 5;
+}

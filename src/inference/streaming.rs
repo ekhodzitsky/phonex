@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 /// A recognized word with timing and confidence metadata.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "server", derive(utoipa::ToSchema))]
 #[non_exhaustive]
 pub struct WordInfo {
     pub word: String,
@@ -17,6 +18,7 @@ pub struct WordInfo {
 
 /// Result of file transcription, including word-level details.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "server", derive(utoipa::ToSchema))]
 pub struct TranscribeResult {
     pub text: String,
     pub words: Vec<WordInfo>,

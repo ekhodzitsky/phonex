@@ -13,7 +13,8 @@ crate-type = ["rlib", "cdylib"]
 
 [features]
 default = ["server"]
-server = ["dep:axum", "dep:tokio-stream", "dep:tokio-util", "dep:tower-http", "dep:tower"]
+server = ["dep:axum", "dep:tokio-stream", "dep:tokio-util", "dep:tower-http", "dep:tower", "dep:utoipa", "dep:utoipa-swagger-ui"]
+grpc = ["server", "dep:tonic", "dep:prost", "dep:async-stream"]
 coreml = ["ort/coreml"]
 cuda = ["ort/cuda"]
 ffi = ["ort/nnapi"]
@@ -74,6 +75,15 @@ rubato = "2.0"
 # Async stream adapters (ReceiverStream for SSE)
 tokio-stream = { version = "0.1", optional = true }
 
+# gRPC
+tonic = { version = "0.12", optional = true }
+prost = { version = "0.13", optional = true }
+async-stream = { version = "0.3", optional = true }
+
+# OpenAPI generation for axum
+utoipa = { version = "5", optional = true }
+utoipa-swagger-ui = { version = "9", features = ["axum"], optional = true }
+
 # Cancellation + task tracking for graceful WS/SSE drain on shutdown.
 # `rt` pulls in `CancellationToken` + `TaskTracker` (tokio-util 0.7).
 tokio-util = { version = "0.7", features = ["rt"], optional = true }
@@ -108,6 +118,9 @@ realfft = "3"
 tempfile = "3"
 tokio-tungstenite = "0.29"
 criterion = { version = "0.8", features = ["html_reports"] }
+
+[build-dependencies]
+tonic-build = "0.12"
 
 [profile.release]
 lto = true

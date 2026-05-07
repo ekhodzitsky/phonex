@@ -7,6 +7,9 @@ pub mod metrics;
 pub mod rate_limit;
 pub mod ws;
 
+#[cfg(feature = "grpc")]
+pub mod grpc;
+
 use axum::Router;
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{header, StatusCode};
@@ -15,6 +18,8 @@ use axum::response::{IntoResponse, Json, Response};
 use std::sync::Arc;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::inference::Engine;
 
@@ -112,6 +117,23 @@ pub fn app_with_limits(
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
         .allow_headers(tower_http::cors::Any);
 
+    #[derive(OpenApi)]
+    #[openapi(
+        paths(
+            http::health,
+            http::models,
+            http::transcribe,
+        ),
+        components(schemas(
+            http::HealthResponse,
+            http::ModelInfoResponse,
+            http::TranscribeResponse,
+            crate::inference::WordInfo,
+        )),
+        tags((name = "phonex", description = "Speech-to-text API"))
+    )]
+    struct ApiDoc;
+
     let mut router = Router::new()
         .route("/health", axum::routing::get(http::health))
         .route("/v1/models", axum::routing::get(http::models))
@@ -121,6 +143,7 @@ pub fn app_with_limits(
         .route("/v1/transcribe/stream", axum::routing::get(ws::ws_v1_transcribe_stream))
         .route("/metrics", axum::routing::get(http::metrics))
         .route("/stream", axum::routing::get(ws::ws_handler))
+        .merge(SwaggerUi::new("/docs").url("/openapi.json", ApiDoc::openapi()))
         .layer(DefaultBodyLimit::max(limits.body_limit_bytes))
         .layer(cors)
         .layer(TraceLayer::new_for_http())

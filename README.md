@@ -86,6 +86,14 @@ phonex serve --language english --port 8080 --pool-size 2
 - `POST /v1/transcribe/batch` — multiple files at once
 - `POST /v1/transcribe/stream` — SSE streaming
 - `GET /health` — health check
+- `GET /docs` — Swagger UI (OpenAPI)
+- `GET /openapi.json` — OpenAPI spec
+
+**gRPC** (optional, `--grpc-port 50051`):
+- `Transcribe` — offline transcription with word-level timestamps
+- `StreamTranscribe` — bidirectional streaming with per-word timing
+
+See `proto/phonex.proto` for the service definition.
 
 ### 3. Real-time streaming
 

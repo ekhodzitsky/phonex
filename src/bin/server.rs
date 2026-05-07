@@ -44,6 +44,11 @@ struct Args {
     /// Comma-separated list of allowed CORS origins
     #[arg(long, value_delimiter = ',')]
     cors_origins: Option<Vec<String>>,
+
+    /// Enable gRPC API on the given port (requires `grpc` feature)
+    #[cfg(feature = "grpc")]
+    #[arg(long)]
+    grpc_port: Option<u16>,
 }
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -128,7 +133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let addr: SocketAddr = format!("{}:{}", args.bind, args.port).parse()?;
-    tracing::info!(%addr, "Starting server");
+    tracing::info!(%addr, "Starting HTTP server");
 
     let mut limits = RuntimeLimits {
         api_key: args.api_key,
@@ -140,14 +145,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let shutdown = tokio_util::sync::CancellationToken::new();
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    let app = server::app_with_limits(engine, model_dir, info, limits, shutdown.clone());
+    let app = server::app_with_limits(engine.clone(), model_dir.clone(), info.clone(), limits, shutdown.clone());
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async move {
-            shutdown_signal().await;
-            shutdown.cancel();
-        })
-        .await?;
+    let shutdown_http = shutdown.clone();
+    let http_handle = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(async move {
+                shutdown_http.cancelled().await;
+            })
+            .await
+    });
+
+    #[cfg(feature = "grpc")]
+    let grpc_handle = if let Some(grpc_port) = args.grpc_port {
+        let grpc_addr: SocketAddr = format!("{}:{}", args.bind, grpc_port).parse()?;
+        tracing::info!(%grpc_addr, "Starting gRPC server");
+        let grpc_svc = server::grpc::PhonexGrpcService::new(engine, info, model_dir);
+        Some(tokio::spawn(async move {
+            tonic::transport::Server::builder()
+                .add_service(grpc_svc.into_server())
+                .serve(grpc_addr)
+                .await
+        }))
+    } else {
+        None
+    };
+
+    shutdown_signal().await;
+    shutdown.cancel();
+
+    if let Err(e) = http_handle.await {
+        tracing::error!("HTTP server task failed: {e}");
+    }
+
+    #[cfg(feature = "grpc")]
+    if let Some(h) = grpc_handle {
+        if let Err(e) = h.await {
+            tracing::error!("gRPC server task failed: {e}");
+        }
+    }
 
     tracing::info!("Server shut down gracefully");
     Ok(())

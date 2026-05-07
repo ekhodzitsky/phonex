@@ -51,7 +51,7 @@ pub async fn metrics(State(state): State<Arc<AppState>>) -> Response {
 }
 
 /// Health check response.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct HealthResponse {
     pub status: String,
     pub model: String,
@@ -59,8 +59,8 @@ pub struct HealthResponse {
 }
 
 /// Model info response.
-#[derive(Debug, Serialize)]
-pub struct ModelInfo {
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct ModelInfoResponse {
     pub id: String,
     pub name: String,
     pub version: String,
@@ -74,7 +74,7 @@ pub struct ModelInfo {
 }
 
 /// Transcription response.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct TranscribeResponse {
     pub text: String,
     pub words: Vec<crate::inference::WordInfo>,
@@ -152,6 +152,13 @@ impl Drop for MetricsGuard<'_> {
 }
 
 /// GET /health — health check for monitoring and Docker HEALTHCHECK.
+#[utoipa::path(
+    get,
+    path = "/health",
+    responses(
+        (status = 200, description = "Service is healthy", body = HealthResponse),
+    )
+)]
 pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     let _guard = MetricsGuard {
         registry: &state.metrics_registry,
@@ -173,7 +180,14 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> 
 }
 
 /// GET /v1/models — list loaded models and capabilities.
-pub async fn models(State(state): State<Arc<AppState>>) -> Json<ModelInfo> {
+#[utoipa::path(
+    get,
+    path = "/v1/models",
+    responses(
+        (status = 200, description = "Model information", body = ModelInfoResponse),
+    )
+)]
+pub async fn models(State(state): State<Arc<AppState>>) -> Json<ModelInfoResponse> {
     let _guard = MetricsGuard {
         registry: &state.metrics_registry,
         method: "GET",
@@ -181,7 +195,7 @@ pub async fn models(State(state): State<Arc<AppState>>) -> Json<ModelInfo> {
         start: std::time::Instant::now(),
     };
     let engine = &state.engine;
-    Json(ModelInfo {
+    Json(ModelInfoResponse {
         id: state.model_info.model_id.clone(),
         name: state.model_info.model_name.clone(),
         version: env!("CARGO_PKG_VERSION").into(),
@@ -268,6 +282,14 @@ async fn extract_audio_from_multipart(
 ///
 /// Accepts `audio` field with raw mono f32 LE bytes and optional `sample_rate` field.
 /// Default sample rate is 16000 Hz.
+#[utoipa::path(
+    post,
+    path = "/v1/transcribe",
+    responses(
+        (status = 200, description = "Transcription result", body = TranscribeResponse),
+        (status = 503, description = "Server busy"),
+    )
+)]
 pub async fn transcribe(
     State(state): State<Arc<AppState>>,
     Query(query): Query<TranscribeQuery>,
