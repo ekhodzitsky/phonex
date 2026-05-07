@@ -96,13 +96,13 @@ pub fn app_with_limits(
     let tracker = tokio_util::task::TaskTracker::new();
 
     let state = Arc::new(http::AppState {
-        engine,
+        engine: Arc::new(tokio::sync::RwLock::new(engine)),
         limits: limits.clone(),
         metrics_registry: Some(metrics_registry.clone()),
         shutdown,
         tracker,
-        model_dir,
-        model_info,
+        model_dir: Arc::new(tokio::sync::RwLock::new(model_dir)),
+        model_info: Arc::new(tokio::sync::RwLock::new(model_info)),
         ws_semaphore,
     });
 
@@ -141,6 +141,7 @@ pub fn app_with_limits(
         .route("/v1/transcribe/batch", axum::routing::post(http::transcribe_batch))
         .route("/v1/transcribe/stream", axum::routing::post(http::transcribe_stream))
         .route("/v1/transcribe/stream", axum::routing::get(ws::ws_v1_transcribe_stream))
+        .route("/v1/admin/reload", axum::routing::post(http::reload))
         .route("/metrics", axum::routing::get(http::metrics))
         .route("/stream", axum::routing::get(ws::ws_handler))
         .merge(SwaggerUi::new("/docs").url("/openapi.json", ApiDoc::openapi()))

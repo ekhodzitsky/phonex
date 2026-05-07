@@ -17,13 +17,13 @@ use crate::inference::Engine;
 
 /// Shared application state for all handlers.
 pub struct AppState {
-    pub engine: Arc<Engine>,
+    pub engine: Arc<tokio::sync::RwLock<Arc<Engine>>>,
     pub limits: RuntimeLimits,
     pub metrics_registry: Option<Arc<MetricsRegistry>>,
     pub shutdown: tokio_util::sync::CancellationToken,
     pub tracker: tokio_util::task::TaskTracker,
-    pub model_dir: String,
-    pub model_info: crate::model_config::ModelInfo,
+    pub model_dir: Arc<tokio::sync::RwLock<String>>,
+    pub model_info: Arc<tokio::sync::RwLock<crate::model_config::ModelInfo>>,
     pub ws_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
@@ -166,7 +166,8 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> 
         path: "/health",
         start: std::time::Instant::now(),
     };
-    let engine = &state.engine;
+    let engine = state.engine.read().await;
+    let model_info = state.model_info.read().await;
     let status = if engine.pool.available() > 0 || engine.pool.total() == 0 {
         "ok"
     } else {
@@ -174,7 +175,7 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> 
     };
     Json(HealthResponse {
         status: status.into(),
-        model: state.model_info.model_id.clone(),
+        model: model_info.model_id.clone(),
         version: env!("CARGO_PKG_VERSION").into(),
     })
 }
@@ -194,10 +195,11 @@ pub async fn models(State(state): State<Arc<AppState>>) -> Json<ModelInfoRespons
         path: "/v1/models",
         start: std::time::Instant::now(),
     };
-    let engine = &state.engine;
+    let engine = state.engine.read().await;
+    let model_info = state.model_info.read().await;
     Json(ModelInfoResponse {
-        id: state.model_info.model_id.clone(),
-        name: state.model_info.model_name.clone(),
+        id: model_info.model_id.clone(),
+        name: model_info.model_name.clone(),
         version: env!("CARGO_PKG_VERSION").into(),
         encoder: "int8".into(),
         vocab_size: engine.vocab_size(),
@@ -303,8 +305,8 @@ pub async fn transcribe(
     };
     let (body, client_rate) = extract_audio_from_multipart(&mut multipart, &query, state.limits.body_limit_bytes).await?;
     let use_vad = query.vad;
-    let (triplet, reservation) = checkout_triplet(&state.engine).await?;
-    let engine = state.engine.clone();
+    let engine = state.engine.read().await.clone();
+    let (triplet, reservation) = checkout_triplet(&engine).await?;
 
     let result = tokio::task::spawn_blocking(move || {
         let mut triplet = triplet;
@@ -396,8 +398,8 @@ pub async fn transcribe_batch(
         ));
     }
 
-    let (triplet, reservation) = checkout_triplet(&state.engine).await?;
-    let engine = state.engine.clone();
+    let engine = state.engine.read().await.clone();
+    let (triplet, reservation) = checkout_triplet(&engine).await?;
 
     let results = tokio::task::spawn_blocking(move || {
         let mut triplet = triplet;
@@ -470,11 +472,12 @@ pub async fn transcribe_stream(
         start: std::time::Instant::now(),
     };
     let (body, client_rate) = extract_audio_from_multipart(&mut multipart, &query, state.limits.body_limit_bytes).await?;
-    let (triplet, reservation) = checkout_triplet(&state.engine).await?;
+    let engine = state.engine.read().await.clone();
+    let (triplet, reservation) = checkout_triplet(&engine).await?;
 
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<crate::inference::TranscriptSegment, String>>(16);
 
-    let engine = state.engine.clone();
+    let engine = engine.clone();
     let cancel = state.shutdown.clone();
     let tracker = state.tracker.clone();
     tracker.spawn_blocking(move || {
@@ -550,3 +553,74 @@ pub async fn transcribe_stream(
 }
 
 
+
+/// POST /v1/admin/reload — hot-swap the loaded model without restarting the server.
+#[derive(Debug, Deserialize)]
+pub struct ReloadQuery {
+    /// Optional new model directory. If omitted, reloads the current model.
+    pub model_dir: Option<String>,
+}
+
+pub async fn reload(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ReloadQuery>,
+) -> Result<Json<HealthResponse>, ApiError> {
+    let new_model_dir = query.model_dir.unwrap_or_else(|| {
+        state.model_dir.blocking_read().clone()
+    });
+
+    tracing::info!(model_dir = %new_model_dir, "Hot-swapping model");
+
+    let info = crate::model_config::ModelInfo::from_model_dir(&new_model_dir)
+        .map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("Failed to load model: {e}"), "model_load_error"))?;
+    let paths = crate::model_config::discover_model_files(&new_model_dir)
+        .map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("Failed to discover model files: {e}"), "model_discovery_error"))?;
+
+    let tokenizer = Arc::new(crate::tokenizer::Tokenizer::from_file(
+        paths.tokenizer.to_str().unwrap_or(""),
+        paths.tokens.to_str().unwrap_or(""),
+        info.blank_id,
+    ).map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("Failed to load tokenizer: {e}"), "tokenizer_error"))?);
+
+    let pool_size = state.engine.read().await.pool.total().max(1);
+    let mut triplets = Vec::with_capacity(pool_size);
+    for i in 0..pool_size {
+        tracing::debug!(slot = i, "Loading ONNX sessions for hot-swap");
+        triplets.push(crate::inference::SessionTriplet::from_model_dir(&new_model_dir, &info)
+            .map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("Failed to create session: {e}"), "session_error"))?);
+    }
+
+    let pool = crate::inference::pool::SessionPool::new(triplets);
+    let new_engine = Arc::new(
+        crate::inference::Engine::new(pool, tokenizer, info.clone()).with_vad(
+            paths.vad.map(|p| p.to_string_lossy().to_string()).unwrap_or_default().as_str(),
+        ),
+    );
+
+    {
+        let mut engine_guard = state.engine.write().await;
+        *engine_guard = new_engine;
+    }
+    {
+        let mut model_dir_guard = state.model_dir.write().await;
+        *model_dir_guard = new_model_dir;
+    }
+    {
+        let mut model_info_guard = state.model_info.write().await;
+        *model_info_guard = info;
+    }
+
+    let engine = state.engine.read().await;
+    let model_info = state.model_info.read().await;
+    let status = if engine.pool.available() > 0 || engine.pool.total() == 0 {
+        "ok"
+    } else {
+        "degraded"
+    };
+
+    Ok(Json(HealthResponse {
+        status: status.into(),
+        model: model_info.model_id.clone(),
+        version: env!("CARGO_PKG_VERSION").into(),
+    }))
+}

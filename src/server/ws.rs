@@ -6,6 +6,7 @@ use axum::response::Response;
 use futures_util::StreamExt;
 use std::sync::Arc;
 
+use crate::inference::Engine;
 use crate::protocol::{ClientMessage, ServerMessage};
 use crate::server::http::AppState;
 
@@ -44,8 +45,8 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
 
     // Build a StreamingPipeline for this connection.
     let mut pipeline = match crate::streaming_pipeline::StreamingPipeline::from_model_dir(
-        &state.model_dir,
-        &state.model_info,
+        &*state.model_dir.read().await,
+        &*state.model_info.read().await,
         None,
     ) {
         Ok(p) => p,
@@ -250,7 +251,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         registry.counter_inc("ws_connections_total", vec![], 1);
     }
 
-    let mut stream_state = match state.engine.create_state(false) {
+    let engine = state.engine.read().await.clone();
+
+    let mut stream_state = match engine.create_state(false) {
         Ok(s) => s,
         Err(e) => {
             let _ = send_error(&mut socket, &format!("{e}"), "state_error", None).await;
@@ -259,7 +262,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     };
 
     // Checkout a triplet from the pool for this connection
-    let (mut triplet, reservation) = match checkout_triplet(&state).await {
+    let (mut triplet, reservation) = match checkout_triplet(&engine).await {
         Ok(t) => t,
         Err(_) => {
             let _ = send_error(&mut socket, "Server busy", "pool_timeout", Some(30_000)).await;
@@ -302,7 +305,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 
                 // Check if we should process
                 if stream_state.should_process() {
-                    match state.engine.process_chunk(&[], &mut stream_state, &mut triplet) {
+                    match engine.process_chunk(&[], &mut stream_state, &mut triplet) {
                         Ok(segments) => {
                             for seg in segments {
                                 let msg = if seg.is_final {
@@ -343,7 +346,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                         stream_state.clear();
                     }
                     Ok(ClientMessage::Stop) => {
-                        if let Some(seg) = state.engine.flush_state(&mut stream_state, &mut triplet) {
+                        if let Some(seg) = engine.flush_state(&mut stream_state, &mut triplet) {
                             let msg = ServerMessage::Final {
                                 text: seg.text.to_string(),
                                 timestamp: seg.timestamp,
@@ -376,7 +379,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                             }
                             "STOP" => {
                                 if let Some(seg) =
-                                    state.engine.flush_state(&mut stream_state, &mut triplet)
+                                    engine.flush_state(&mut stream_state, &mut triplet)
                                 {
                                     let msg = ServerMessage::Final {
                                         text: seg.text.to_string(),
@@ -403,7 +406,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     }
 
     if !flushed
-        && let Some(seg) = state.engine.flush_state(&mut stream_state, &mut triplet)
+        && let Some(seg) = engine.flush_state(&mut stream_state, &mut triplet)
     {
         let msg = ServerMessage::Final {
             text: seg.text.to_string(),
@@ -420,7 +423,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 }
 
 async fn checkout_triplet(
-    state: &Arc<AppState>,
+    engine: &Arc<Engine>,
 ) -> Result<
     (
         crate::inference::SessionTriplet,
@@ -430,7 +433,7 @@ async fn checkout_triplet(
 > {
     match tokio::time::timeout(
         std::time::Duration::from_secs(30),
-        state.engine.pool.checkout(),
+        engine.pool.checkout(),
     )
     .await
     {
@@ -448,7 +451,7 @@ async fn send_ready_message(
     state: &Arc<AppState>,
 ) -> Result<(), axum::Error> {
     let ready = ServerMessage::Ready {
-        model: state.model_info.model_id.clone(),
+        model: state.model_info.read().await.model_id.clone(),
         sample_rate: crate::inference::TARGET_SAMPLE_RATE,
         version: env!("CARGO_PKG_VERSION").into(),
         supported_rates: crate::server::SUPPORTED_RATES.to_vec(),

@@ -88,6 +88,7 @@ phonex serve --language english --port 8080 --pool-size 2
 - `GET /health` — health check
 - `GET /docs` — Swagger UI (OpenAPI)
 - `GET /openapi.json` — OpenAPI spec
+- `POST /v1/admin/reload` — hot-swap model without restart
 
 **gRPC** (optional, `--grpc-port 50051`):
 - `Transcribe` — offline transcription with word-level timestamps
