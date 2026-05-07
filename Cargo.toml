@@ -119,6 +119,11 @@ name = "phonex"
 required-features = ["server"]
 
 [[bin]]
+name = "server"
+path = "src/bin/server.rs"
+required-features = ["server"]
+
+[[bin]]
 name = "streaming"
 path = "src/bin/streaming.rs"
 

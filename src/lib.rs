@@ -10,7 +10,9 @@ pub mod inference;
 pub mod joiner;
 pub mod model;
 pub mod model_config;
+#[cfg(feature = "server")]
 pub mod protocol;
+#[cfg(feature = "server")]
 pub mod server;
 pub mod session;
 pub mod streaming_decoder;
