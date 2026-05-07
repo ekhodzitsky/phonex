@@ -9,8 +9,115 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  build-binaries:
+    name: Build binaries (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            onnx_arch: x64
+            onnx_dir: onnxruntime-linux-x64-1.25.1
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            onnx_arch: aarch64
+            onnx_dir: onnxruntime-linux-aarch64-1.25.1
+            cross: true
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            onnx_arch: none
+            onnx_dir: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install ONNX Runtime (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          curl -fsSL https://github.com/microsoft/onnxruntime/releases/download/v1.25.1/${{ matrix.onnx_dir }}.tgz -o onnxruntime.tgz
+          sudo tar -xzf onnxruntime.tgz -C /opt
+          sudo mv /opt/${{ matrix.onnx_dir }} /opt/onnxruntime
+          echo "ORT_LIB_PATH=/opt/onnxruntime/lib" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/opt/onnxruntime/lib" >> $GITHUB_ENV
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+
+      - name: Install ONNX Runtime (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install onnxruntime
+          echo "ORT_LIB_PATH=$(brew --prefix onnxruntime)/lib" >> $GITHUB_ENV
+          echo "DYLD_LIBRARY_PATH=$(brew --prefix onnxruntime)/lib" >> $GITHUB_ENV
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build release binaries
+        run: |
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }} --bin phonex --bin server --bin streaming
+          else
+            cargo build --release --target ${{ matrix.target }} --bin phonex --bin server --bin streaming
+          fi
+
+      - name: Build FFI library
+        run: |
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }} --features ffi --no-default-features
+          else
+            cargo build --release --target ${{ matrix.target }} --features ffi --no-default-features
+          fi
+
+      - name: Package binaries
+        run: |
+          mkdir -p phonex-${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/phonex phonex-${{ matrix.target }}/ || true
+          cp target/${{ matrix.target }}/release/server phonex-${{ matrix.target }}/ || true
+          cp target/${{ matrix.target }}/release/streaming phonex-${{ matrix.target }}/ || true
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            cp target/${{ matrix.target }}/release/libphonex.dylib phonex-${{ matrix.target }}/ || true
+          else
+            cp target/${{ matrix.target }}/release/libphonex.so phonex-${{ matrix.target }}/ || true
+          fi
+          tar czf phonex-${{ matrix.target }}.tar.gz phonex-${{ matrix.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: phonex-${{ matrix.target }}
+          path: phonex-${{ matrix.target }}.tar.gz
+
+  create-release:
+    name: Create GitHub Release
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.tar.gz
+          generate_release_notes: true
+
   publish-crate:
     name: Publish to crates.io
+    needs: create-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
