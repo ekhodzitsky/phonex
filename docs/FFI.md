@@ -103,6 +103,17 @@ Finalize and return the full transcript.
 - **Returns**: UTF-8 string, or `NULL` on error.
 - **Ownership**: caller must free with `phonex_string_free`.
 
+#### `phonex_stream_flush_with_tokens`
+
+```c
+char* phonex_stream_flush_with_tokens(void* stream);
+```
+
+Finalize and return the full transcript **with word-level timestamps**.
+
+- **Returns**: JSON string `{"text":"...","tokens":[{"id":1,"text":"hello","start":0.0,"end":0.5,"confidence":0.98}]}`
+- **Ownership**: caller must free with `phonex_string_free`.
+
 #### `phonex_stream_reset`
 
 ```c

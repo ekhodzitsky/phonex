@@ -73,6 +73,9 @@ class _Lib:
         self._lib.phonex_stream_flush.argtypes = [ctypes.c_void_p]
         self._lib.phonex_stream_flush.restype = ctypes.c_char_p
 
+        self._lib.phonex_stream_flush_with_tokens.argtypes = [ctypes.c_void_p]
+        self._lib.phonex_stream_flush_with_tokens.restype = ctypes.c_char_p
+
         self._lib.phonex_stream_reset.argtypes = [ctypes.c_void_p]
         self._lib.phonex_stream_reset.restype = None
 
@@ -128,6 +131,14 @@ class _Lib:
         self._lib.phonex_string_free(c_text)
         return text
 
+    def stream_flush_with_tokens(self, stream: int) -> dict:
+        c_json = self._lib.phonex_stream_flush_with_tokens(stream)
+        if not c_json:
+            raise PhonexError("Stream flush with tokens failed")
+        json_str = ctypes.cast(c_json, ctypes.c_char_p).value.decode("utf-8")
+        self._lib.phonex_string_free(c_json)
+        return json.loads(json_str)
+
     def stream_reset(self, stream: int) -> None:
         self._lib.phonex_stream_reset(stream)
 
@@ -179,6 +190,9 @@ class Stream:
 
     def flush(self) -> str:
         return self._lib.stream_flush(self._ptr)
+
+    def flush_with_tokens(self) -> dict:
+        return self._lib.stream_flush_with_tokens(self._ptr)
 
     def reset(self) -> None:
         self._lib.stream_reset(self._ptr)

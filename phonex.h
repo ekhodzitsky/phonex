@@ -21,6 +21,7 @@ char* phonex_transcribe_file(void* engine, const char* wav_path);
 void* phonex_stream_new(const char* model_dir, const char* vad_path);
 char* phonex_stream_process_chunk(void* stream, const float* samples, size_t len);
 char* phonex_stream_flush(void* stream);
+char* phonex_stream_flush_with_tokens(void* stream);
 void phonex_stream_reset(void* stream);
 void phonex_stream_free(void* stream);
 

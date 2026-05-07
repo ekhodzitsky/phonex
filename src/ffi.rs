@@ -294,6 +294,42 @@ pub unsafe extern "C" fn phonex_stream_flush(stream: *mut PhonexStream) -> *mut 
     }
 }
 
+/// Flush the streaming pipeline and return the final text with word-level timestamps.
+///
+/// # Safety
+/// `stream` must be a valid pointer.
+///
+/// Returns a newly allocated JSON string on success, or `NULL` on failure.
+/// Format: `{"text":"hello world","tokens":[{"id":1,"text":"hello","start":0.0,"end":0.5,"confidence":0.98},...]}`
+/// The caller **must** free the returned string with `phonex_string_free`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn phonex_stream_flush_with_tokens(stream: *mut PhonexStream) -> *mut c_char {
+    if stream.is_null() {
+        eprintln!("phonex_stream_flush_with_tokens: stream is null");
+        return ptr::null_mut();
+    }
+
+    let stream_ref = unsafe { &mut (*stream).pipeline };
+
+    match stream_ref.flush_with_tokens() {
+        Ok((text, tokens)) => {
+            let result = serde_json::json!({
+                "text": text,
+                "tokens": tokens,
+            });
+            let json = serde_json::to_string(&result).unwrap_or_else(|_| "{}".into());
+            match CString::new(json) {
+                Ok(cstr) => cstr.into_raw(),
+                Err(_) => ptr::null_mut(),
+            }
+        }
+        Err(e) => {
+            eprintln!("phonex_stream_flush_with_tokens: flush failed: {e}");
+            ptr::null_mut()
+        }
+    }
+}
+
 /// Reset the streaming pipeline for a new utterance.
 ///
 /// # Safety

@@ -212,6 +212,12 @@ impl StreamingPipeline {
 
     /// Finalize decoding, process any trailing frames, and return full text.
     pub fn flush(&mut self) -> crate::Result<String> {
+        let (text, _tokens) = self.flush_with_tokens()?;
+        Ok(text)
+    }
+
+    /// Finalize decoding and return both text and word-level timestamps.
+    pub fn flush_with_tokens(&mut self) -> crate::Result<(String, Vec<DecodeToken>)> {
         self.online.input_finished();
         let remaining = self.online.num_frames_ready().saturating_sub(self.next_frame_idx);
         if remaining > 0 {
@@ -229,7 +235,7 @@ impl StreamingPipeline {
 
         let ids: Vec<u32> = self.all_tokens.iter().map(|t| t.id).collect();
         let text = self.tokenizer.decode_ids(&ids);
-        Ok(text)
+        Ok((text, self.all_tokens.clone()))
     }
 
     /// Return accumulated tokens so far.
