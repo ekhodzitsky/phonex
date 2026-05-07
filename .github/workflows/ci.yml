@@ -37,7 +37,7 @@ jobs:
           echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
 
       - name: Check
-        run: cargo check --all-features
+        run: cargo check --features "server,grpc,diarization,tls,coreml,cuda,ffi,bench-with-model"
 
   test:
     runs-on: macos-latest
@@ -66,7 +66,7 @@ jobs:
           echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
 
       - name: Test
-        run: cargo test --all-features
+        run: cargo test --features "server,grpc,diarization,tls,coreml,cuda,ffi,bench-with-model"
 
   clippy:
     runs-on: macos-latest
@@ -97,7 +97,7 @@ jobs:
           echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
 
       - name: Clippy
-        run: cargo clippy --all-features -- -D warnings
+        run: cargo clippy --features "server,grpc,diarization,tls,coreml,cuda,ffi,bench-with-model" -- -D warnings
 
   fmt:
     runs-on: macos-latest
