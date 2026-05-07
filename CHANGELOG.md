@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2025-05-06
+
+### Added
+- **FFI layer** — C-ABI for embedding into Android, iOS, Python, C/C++
+- **Python bindings** — `bindings/python/phonex.py` with `Engine` and `Stream` classes
+- **C header** — `phonex.h` with full API reference
+- **Pre-built binaries** — GitHub Actions workflow builds for linux/amd64, linux/arm64, macOS/arm64
+- **Benchmark docs** — comparison with whisper.cpp
+- **10 language models** support — docs for Thai, English, Chinese, German, French, Spanish, Portuguese, Russian, Japanese, Korean
+- **Docs site** — `docs/API.md`, `docs/MODELS.md`, `docs/BUILD.md`, `docs/FAQ.md`, `docs/SECURITY.md`, `docs/FFI.md`, `docs/BENCHMARK.md`
+
+### Changed
+- `Cargo.lock` committed for reproducible builds
+- Dockerfile: Rust 1.82 → 1.95, added `cmake` and `build-essential`
+
+### Fixed
+- **CI: Docker build** — fixed `Cargo.lock` and `cmake` missing in Dockerfile
+- **CI: VAD tests** — download `silero_vad.onnx` in CI workflow
+
 ## [0.2.0] - 2025-05-05
 
 ### Added
@@ -47,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - VAD-based segmentation with word-level timing
 - Multi-format audio input: WAV, MP3, OGG, FLAC, AAC
 
-[unreleased]: https://github.com/ekhodzitsky/phonex/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/ekhodzitsky/phonex/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/ekhodzitsky/phonex/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ekhodzitsky/phonex/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ekhodzitsky/phonex/releases/tag/v0.1.0
