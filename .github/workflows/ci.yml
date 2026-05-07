@@ -82,7 +82,10 @@ jobs:
         run: cargo test --all-targets
 
       - name: Run integration tests (with models)
-        run: cargo test --test integration -- --ignored
+        run: cargo test --test integration -- --ignored --nocapture
+        env:
+          RUST_BACKTRACE: 1
+        timeout-minutes: 15
 
   docker:
     runs-on: ubuntu-latest
