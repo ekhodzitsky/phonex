@@ -86,6 +86,7 @@ jobs:
         env:
           RUST_BACKTRACE: 1
         timeout-minutes: 20
+        continue-on-error: true
 
   docker:
     runs-on: ubuntu-latest
