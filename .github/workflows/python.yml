@@ -16,22 +16,17 @@ jobs:
           - os: ubuntu-latest
             target: x86_64
             manylinux: auto
-            onnx_arch: x64
             onnx_dir: onnxruntime-linux-x64-1.25.1
           - os: ubuntu-latest
             target: aarch64
             manylinux: "2_28"
-            onnx_arch: aarch64
             onnx_dir: onnxruntime-linux-aarch64-1.25.1
           - os: macos-latest
             target: x86_64
-            onnx_arch: none
           - os: macos-latest
             target: aarch64
-            onnx_arch: none
           - os: windows-latest
             target: x86_64
-            onnx_arch: x64
             onnx_dir: onnxruntime-win-x64-1.25.1
     steps:
       - uses: actions/checkout@v4
@@ -68,13 +63,10 @@ jobs:
             curl -fsSL https://github.com/microsoft/onnxruntime/releases/download/v1.25.1/${{ matrix.onnx_dir }}.tgz -o onnxruntime.tgz
             tar -xzf onnxruntime.tgz -C /opt
             mv /opt/${{ matrix.onnx_dir }} /opt/onnxruntime
-            echo "ORT_LIB_PATH=/opt/onnxruntime/lib" >> $GITHUB_ENV
-            echo "LD_LIBRARY_PATH=/opt/onnxruntime/lib" >> $GITHUB_ENV
-            echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
         env:
-          ORT_LIB_PATH: ${{ env.ORT_LIB_PATH }}
-          ORT_PREFER_DYNAMIC_LINK: ${{ env.ORT_PREFER_DYNAMIC_LINK }}
-          LD_LIBRARY_PATH: ${{ env.LD_LIBRARY_PATH }}
+          ORT_LIB_PATH: ${{ matrix.os == 'ubuntu-latest' && '/opt/onnxruntime/lib' || env.ORT_LIB_PATH }}
+          ORT_PREFER_DYNAMIC_LINK: 1
+          LD_LIBRARY_PATH: ${{ matrix.os == 'ubuntu-latest' && '/opt/onnxruntime/lib' || env.LD_LIBRARY_PATH }}
           DYLD_LIBRARY_PATH: ${{ env.DYLD_LIBRARY_PATH }}
 
       - name: Upload wheels
