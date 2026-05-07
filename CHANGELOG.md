@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2025-05-07
+
+### Fixed
+- **FFI build** — gate server/protocol modules behind `server` feature for clean `--no-default-features` builds
+
 ## [0.2.1] - 2025-05-06
 
 ### Added
@@ -66,7 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - VAD-based segmentation with word-level timing
 - Multi-format audio input: WAV, MP3, OGG, FLAC, AAC
 
-[unreleased]: https://github.com/ekhodzitsky/phonex/compare/v0.2.1...HEAD
+[unreleased]: https://github.com/ekhodzitsky/phonex/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/ekhodzitsky/phonex/compare/v0.2.1...v0.2.3
 [0.2.1]: https://github.com/ekhodzitsky/phonex/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ekhodzitsky/phonex/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ekhodzitsky/phonex/releases/tag/v0.1.0
