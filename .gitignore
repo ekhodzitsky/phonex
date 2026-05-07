@@ -15,6 +15,7 @@ Thumbs.db
 
 # Models
 models/
+!models/manifest.json
 *.onnx
 
 # Local environment

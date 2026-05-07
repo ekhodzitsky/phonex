@@ -14,6 +14,7 @@ pub mod inference;
 pub mod joiner;
 pub mod model;
 pub mod model_config;
+pub mod model_manifest;
 #[cfg(feature = "server")]
 pub mod protocol;
 #[cfg(feature = "server")]

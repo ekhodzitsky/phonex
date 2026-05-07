@@ -4,6 +4,8 @@ use futures_util::StreamExt;
 use std::io::Write;
 use std::path::Path;
 
+use crate::model_manifest::{ModelManifest, find_manifest_by_url};
+
 /// Specification for a downloadable Sherpa-ONNX model.
 pub struct ModelSpec {
     pub dir_name: &'static str,
@@ -168,17 +170,34 @@ pub fn ensure_model(model_dir: &str) -> crate::Result<()> {
         download_with_progress(spec.url, &archive_path)?;
     }
 
-    if let Some(expected) = spec.sha256 {
-        let actual = sha256_file(&archive_path).map_err(|e| {
-            crate::SiamError::Inference(format!("Checksum computation failed: {e}"))
-        })?;
-        if actual != expected {
-            return Err(crate::SiamError::Inference(format!(
-                "Checksum mismatch for {}: expected {expected}, got {actual}",
-                spec.archive_name
-            )));
+    // Determine expected hash: built-in spec takes precedence, then manifest.
+    let expected_hash = spec.sha256.map(|s| s.to_string()).or_else(|| {
+        find_manifest_by_url(spec.url).and_then(|m: ModelManifest| {
+            tracing::debug!(url = spec.url, "Found manifest entry for model");
+            m.sha256
+        })
+    });
+
+    match expected_hash {
+        Some(expected) => {
+            let actual = sha256_file(&archive_path).map_err(|e| {
+                crate::SiamError::Inference(format!("Checksum computation failed: {e}"))
+            })?;
+            if actual != expected {
+                return Err(crate::SiamError::Inference(format!(
+                    "Checksum mismatch for {}: expected {expected}, got {actual}",
+                    spec.archive_name
+                )));
+            }
+            tracing::info!(archive = %archive_path.display(), "Checksum verified");
         }
-        tracing::info!(archive = %archive_path.display(), "Checksum verified");
+        None => {
+            tracing::warn!(
+                archive = %archive_path.display(),
+                "No SHA-256 hash available for this model; skipping verification. \
+                 Add the hash to models/manifest.json to enable pinning."
+            );
+        }
     }
 
     tracing::info!(archive = %archive_path.display(), "Extracting model archive");
