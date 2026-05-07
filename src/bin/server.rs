@@ -41,6 +41,14 @@ struct Args {
     #[arg(long, env = "PHONEX_API_KEY")]
     api_key: Option<String>,
 
+    /// Optional admin API key for privileged endpoints like /v1/admin/reload
+    #[arg(long, env = "PHONEX_ADMIN_API_KEY")]
+    admin_api_key: Option<String>,
+
+    /// Trust X-Forwarded-For / X-Real-IP headers for rate limiting (only enable behind a trusted proxy)
+    #[arg(long, env = "PHONEX_TRUST_PROXY")]
+    trust_proxy: bool,
+
     /// Comma-separated list of allowed CORS origins
     #[arg(long, value_delimiter = ',')]
     cors_origins: Option<Vec<String>>,
@@ -165,6 +173,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut limits = RuntimeLimits {
         api_key: args.api_key,
+        admin_api_key: args.admin_api_key,
+        trust_proxy: args.trust_proxy,
         ..RuntimeLimits::default()
     };
     if let Some(origins) = args.cors_origins {
@@ -173,7 +183,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let shutdown = tokio_util::sync::CancellationToken::new();
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    let app = server::app_with_limits(engine.clone(), model_dir.clone(), info.clone(), limits, shutdown.clone());
+    let app = server::app_with_limits(engine.clone(), model_dir.clone(), info.clone(), limits.clone(), shutdown.clone());
 
     let shutdown_http = shutdown.clone();
     let http_handle = tokio::spawn(async move {
@@ -188,7 +198,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let grpc_handle = if let Some(grpc_port) = args.grpc_port {
         let grpc_addr: SocketAddr = format!("{}:{}", args.bind, grpc_port).parse()?;
         tracing::info!(%grpc_addr, "Starting gRPC server");
-        let grpc_svc = server::grpc::PhonexGrpcService::new(engine, info, model_dir);
+        let grpc_svc = server::grpc::PhonexGrpcService::new(
+            engine,
+            info,
+            model_dir,
+            limits.max_ws_connections,
+            limits.api_key.clone(),
+        );
         let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
         health_reporter
             .set_serving::<server::grpc::pb::transcription_service_server::TranscriptionServiceServer<server::grpc::PhonexGrpcService>>()

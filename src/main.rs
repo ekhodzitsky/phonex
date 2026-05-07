@@ -183,7 +183,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let samples = if sample_rate == engine.info.sample_rate as usize {
                             samples
                         } else {
-                            phonex::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)
+                            phonex::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)?
                         };
                         let mut triplet = phonex::inference::SessionTriplet::from_model_dir(&model_dir, &engine.info)?;
                         engine.transcribe_samples_with_diarization(&samples, &mut triplet)?

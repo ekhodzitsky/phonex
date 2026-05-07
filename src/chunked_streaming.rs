@@ -43,10 +43,18 @@ impl ChunkedStreamingPipeline {
     ///
     /// Returns newly decoded tokens whenever a speech segment ends.
     pub async fn accept_audio(&mut self, samples: &[f32]) -> crate::Result<Vec<DecodeToken>> {
+        const MAX_SPEECH_BUFFER_SECONDS: f64 = 30.0;
+        const MAX_SPEECH_BUFFER_SAMPLES: usize = (MAX_SPEECH_BUFFER_SECONDS * 16000.0) as usize;
+
         let (speech_samples, speech_ended) = self.vad.process_with_transitions(samples);
         self.speech_buffer.extend_from_slice(&speech_samples);
 
-        if speech_ended && !self.speech_buffer.is_empty() {
+        let force_transcribe = self.speech_buffer.len() > MAX_SPEECH_BUFFER_SAMPLES;
+        if force_transcribe {
+            tracing::warn!("Speech buffer exceeded {}s, forcing transcription", MAX_SPEECH_BUFFER_SECONDS);
+        }
+
+        if (speech_ended || force_transcribe) && !self.speech_buffer.is_empty() {
             self.transcribe_buffer().await
         } else {
             Ok(Vec::new())
@@ -68,18 +76,29 @@ impl ChunkedStreamingPipeline {
     }
 
     async fn transcribe_buffer(&mut self) -> crate::Result<Vec<DecodeToken>> {
-        let mut guard = self.engine.pool.checkout().await
+        let engine = self.engine.clone();
+        let samples = std::mem::take(&mut self.speech_buffer);
+        let guard = self.engine.pool.checkout().await
             .map_err(|_| crate::SiamError::Inference("Pool empty".into()))?;
-        let result = self.engine.transcribe_samples(&self.speech_buffer, &mut guard)?;
-
+        let guard = guard.into_owned();
         let offset = self.global_time_offset;
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut guard = guard;
+            engine.transcribe_samples(&samples, &mut *guard)
+        })
+        .await
+        .map_err(|e| crate::SiamError::Inference(format!("spawn_blocking error: {e}")))?;
+
+        let result = match result {
+            Ok(r) => r,
+            Err(e) => return Err(e),
+        };
+
         let mut new_tokens = Vec::new();
         for word in result.words {
-            // Map word to a DecodeToken. We need a way to get token IDs from words.
-            // Offline transcription returns WordInfo, not token IDs.
-            // For chunked streaming, we'll create synthetic tokens per word.
             new_tokens.push(DecodeToken {
-                id: 0, // Synthetic ID; words don't map 1:1 to BPE tokens easily
+                id: 0,
                 text: word.word,
                 start: offset + word.start,
                 end: offset + word.end,
@@ -88,7 +107,6 @@ impl ChunkedStreamingPipeline {
         }
 
         self.global_time_offset += result.duration_s;
-        self.speech_buffer.clear();
         self.all_tokens.extend(new_tokens.clone());
         Ok(new_tokens)
     }

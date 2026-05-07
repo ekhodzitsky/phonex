@@ -21,11 +21,37 @@ pub struct PhonexGrpcService {
     engine: Arc<Engine>,
     model_info: ModelInfo,
     model_dir: String,
+    stream_semaphore: Option<Arc<tokio::sync::Semaphore>>,
+    api_key: Option<String>,
 }
 
 impl PhonexGrpcService {
-    pub fn new(engine: Arc<Engine>, model_info: ModelInfo, model_dir: String) -> Self {
-        Self { engine, model_info, model_dir }
+    pub fn new(
+        engine: Arc<Engine>,
+        model_info: ModelInfo,
+        model_dir: String,
+        max_streaming_connections: usize,
+        api_key: Option<String>,
+    ) -> Self {
+        let stream_semaphore = if max_streaming_connections > 0 {
+            Some(Arc::new(tokio::sync::Semaphore::new(max_streaming_connections)))
+        } else {
+            None
+        };
+        Self { engine, model_info, model_dir, stream_semaphore, api_key }
+    }
+
+    fn check_auth<T>(&self, request: &Request<T>) -> Result<(), Status> {
+        if let Some(ref expected) = self.api_key {
+            let valid = request.metadata()
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .is_some_and(|s| s.strip_prefix("Bearer ").is_some_and(|t| t == expected));
+            if !valid {
+                return Err(Status::unauthenticated("Invalid API key"));
+            }
+        }
+        Ok(())
     }
 
     pub fn into_server(self) -> TranscriptionServiceServer<Self> {
@@ -40,7 +66,16 @@ impl TranscriptionService for PhonexGrpcService {
         &self,
         request: Request<TranscribeRequest>,
     ) -> Result<Response<TranscribeResponse>, Status> {
+        self.check_auth(&request)?;
         let req = request.into_inner();
+        
+        const MAX_AUDIO_BYTES: usize = 500 * 1024 * 1024; // 500 MB
+        if req.audio_data.len() > MAX_AUDIO_BYTES {
+            return Err(Status::invalid_argument(format!(
+                "Audio data exceeds maximum size of {} bytes",
+                MAX_AUDIO_BYTES
+            )));
+        }
         
         let mut guard = self.engine.pool.try_checkout()
             .ok_or_else(|| Status::resource_exhausted("No available inference sessions"))?;
@@ -81,6 +116,22 @@ impl TranscriptionService for PhonexGrpcService {
         &self,
         request: Request<Streaming<StreamAudioRequest>>,
     ) -> Result<Response<Self::StreamTranscribeStream>, Status> {
+        self.check_auth(&request)?;
+        let _permit = match &self.stream_semaphore {
+            Some(sem) => {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    sem.acquire(),
+                ).await {
+                    Ok(Ok(p)) => Some(p),
+                    _ => return Err(Status::resource_exhausted(
+                        "Too many concurrent streaming connections"
+                    )),
+                }
+            }
+            None => None,
+        };
+
         let mut stream = request.into_inner();
         let model_dir = self.model_dir.clone();
         let info = self.model_info.clone();

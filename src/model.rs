@@ -9,6 +9,7 @@ pub struct ModelSpec {
     pub dir_name: &'static str,
     pub archive_name: &'static str,
     pub url: &'static str,
+    pub sha256: Option<&'static str>,
 }
 
 /// Registry of known models that can be auto-downloaded.
@@ -18,92 +19,110 @@ pub const KNOWN_MODELS: &[ModelSpec] = &[
         dir_name: "sherpa-onnx-small-zipformer-ru-2024-09-18",
         archive_name: "sherpa-onnx-small-zipformer-ru-2024-09-18.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-small-zipformer-ru-2024-09-18.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01",
         archive_name: "sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-zipformer-vi-30M-int8-2026-02-09",
         archive_name: "sherpa-onnx-zipformer-vi-30M-int8-2026-02-09.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-vi-30M-int8-2026-02-09.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-zipformer-gigaspeech-2023-12-12",
         archive_name: "sherpa-onnx-zipformer-gigaspeech-2023-12-12.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-gigaspeech-2023-12-12.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-zipformer-en-2023-06-26",
         archive_name: "sherpa-onnx-zipformer-en-2023-06-26.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-en-2023-06-26.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-zipformer-en-libriheavy-20230926-small",
         archive_name: "sherpa-onnx-zipformer-en-libriheavy-20230926-small.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-en-libriheavy-20230926-small.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-zipformer-thai-2024-06-20",
         archive_name: "sherpa-onnx-zipformer-thai-2024-06-20.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-thai-2024-06-20.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-zipformer-cantonese-2024-03-13",
         archive_name: "sherpa-onnx-zipformer-cantonese-2024-03-13.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-cantonese-2024-03-13.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-zipformer-zh-en-2023-11-22",
         archive_name: "sherpa-onnx-zipformer-zh-en-2023-11-22.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-zh-en-2023-11-22.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-zipformer-korean-2024-06-24",
         archive_name: "sherpa-onnx-zipformer-korean-2024-06-24.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-korean-2024-06-24.tar.bz2",
+        sha256: None,
     },
     // Streaming models
     ModelSpec {
         dir_name: "sherpa-onnx-streaming-zipformer-en-2023-06-21",
         archive_name: "sherpa-onnx-streaming-zipformer-en-2023-06-21.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-2023-06-21.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-streaming-zipformer-en-2023-06-26",
         archive_name: "sherpa-onnx-streaming-zipformer-en-2023-06-26.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-2023-06-26.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-streaming-zipformer-fr-2023-04-14",
         archive_name: "sherpa-onnx-streaming-zipformer-fr-2023-04-14.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-fr-2023-04-14.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-streaming-zipformer-de-kroko-2025-08-06",
         archive_name: "sherpa-onnx-streaming-zipformer-de-kroko-2025-08-06.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-de-kroko-2025-08-06.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-streaming-zipformer-es-kroko-2025-08-06",
         archive_name: "sherpa-onnx-streaming-zipformer-es-kroko-2025-08-06.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-es-kroko-2025-08-06.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-streaming-zipformer-korean-2024-06-16",
         archive_name: "sherpa-onnx-streaming-zipformer-korean-2024-06-16.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-korean-2024-06-16.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30",
         archive_name: "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.tar.bz2",
+        sha256: None,
     },
     ModelSpec {
         dir_name: "sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09",
         archive_name: "sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09.tar.bz2",
+        sha256: None,
     },
 ];
 
@@ -147,6 +166,18 @@ pub fn ensure_model(model_dir: &str) -> crate::Result<()> {
     if !archive_path.exists() {
         tracing::info!(url = spec.url, "Downloading model archive");
         download_with_progress(spec.url, &archive_path)?;
+    }
+
+    if let Some(expected) = spec.sha256 {
+        let actual = sha256_file(&archive_path)
+            .map_err(|e| crate::SiamError::Inference(format!("Checksum computation failed: {e}")))?;
+        if actual != expected {
+            return Err(crate::SiamError::Inference(format!(
+                "Checksum mismatch for {}: expected {expected}, got {actual}",
+                spec.archive_name
+            )));
+        }
+        tracing::info!(archive = %archive_path.display(), "Checksum verified");
     }
 
     tracing::info!(archive = %archive_path.display(), "Extracting model archive");
@@ -217,7 +248,30 @@ fn extract_tar_bz2(archive: &Path, dest: &Path) -> crate::Result<()> {
     let file = std::fs::File::open(archive)?;
     let decompressor = bzip2::read::BzDecoder::new(file);
     let mut archive = tar::Archive::new(decompressor);
-    archive.unpack(dest)
-        .map_err(|e| crate::SiamError::Inference(format!("Extraction failed: {e}")))?;
+
+    for entry in archive.entries()? {
+        let mut entry = entry.map_err(|e| crate::SiamError::Inference(format!("Extraction failed: {e}")))?;
+        // unpack_in validates that the entry path stays within dest
+        entry.unpack_in(dest)
+            .map_err(|e| crate::SiamError::Inference(format!("Extraction failed: {e}")))?;
+    }
     Ok(())
+}
+
+/// Compute the SHA-256 hex digest of a file.
+fn sha256_file(path: &Path) -> crate::Result<String> {
+    use sha2::Digest;
+    use std::io::Read;
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = sha2::Sha256::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let result = hasher.finalize();
+    Ok(result.iter().map(|b| format!("{:02x}", b)).collect())
 }

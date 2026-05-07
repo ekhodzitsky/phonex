@@ -278,3 +278,11 @@ impl StreamingPipeline {
 
 
 
+
+#[cfg(test)]
+mod tests {
+    fn _assert_send<T: Send>() {}
+    fn _assert_send_pipeline() {
+        _assert_send::<super::StreamingPipeline>();
+    }
+}

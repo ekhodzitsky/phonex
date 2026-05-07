@@ -219,7 +219,8 @@ impl ModelInfo {
             encoder.outputs().iter().find_map(|o| {
                 if let ort::value::ValueType::Tensor { shape, .. } = o.dtype()
                     && shape.len() == 3 {
-                        return Some(shape[2] as usize);
+                        let dim = shape[2];
+                        return Some(if dim <= 0 { 512usize } else { dim as usize });
                     }
                 None
             }).unwrap_or(512)
@@ -229,7 +230,8 @@ impl ModelInfo {
             decoder.inputs().iter().find_map(|i| {
                 if let ort::value::ValueType::Tensor { shape, .. } = i.dtype()
                     && shape.len() == 2 {
-                        return Some(shape[1] as usize);
+                        let dim = shape[1];
+                        return Some(if dim <= 0 { 2usize } else { dim as usize });
                     }
                 None
             }).unwrap_or(2)
@@ -239,7 +241,8 @@ impl ModelInfo {
             joiner.outputs().iter().find_map(|o| {
                 if let ort::value::ValueType::Tensor { shape, .. } = o.dtype()
                     && shape.len() == 2 {
-                        return Some(shape[1] as usize);
+                        let dim = shape[1];
+                        return Some(if dim <= 0 { 2000usize } else { dim as usize });
                     }
                 None
             }).unwrap_or(2000)
@@ -262,7 +265,8 @@ impl ModelInfo {
 
         // If there was no model.json, write one with auto-detected values so the
         // next startup skips ONNX probing.
-        if !config_path.exists() {
+        let model_dir_path = std::path::Path::new(model_dir);
+        if !config_path.exists() && model_dir_path.is_dir() {
             let auto_config = ModelConfig {
                 sample_rate: config.sample_rate,
                 n_mels,

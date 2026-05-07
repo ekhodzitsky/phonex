@@ -97,10 +97,13 @@ impl Engine {
 
     pub fn with_vad(mut self, model_path: &str) -> Self {
         if std::path::Path::new(model_path).exists() {
-            self.vad = Some(Vad::new(VadConfig {
+            match Vad::new(VadConfig {
                 model_path: model_path.into(),
                 ..VadConfig::default()
-            }));
+            }) {
+                Ok(vad) => self.vad = Some(vad),
+                Err(e) => tracing::warn!("Failed to load VAD model: {e}"),
+            }
         }
         self
     }
@@ -181,7 +184,7 @@ impl Engine {
         let samples = if sample_rate == self.info.sample_rate as usize {
             samples
         } else {
-            crate::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)
+            crate::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)?
         };
         let mut guard = self.pool.try_checkout()
             .ok_or_else(|| SiamError::Inference("Pool empty".into()))?;
@@ -276,7 +279,7 @@ impl Engine {
         let mut vad = Vad::new(VadConfig {
             model_path: "models/silero_vad.onnx".into(),
             ..VadConfig::default()
-        });
+        }).map_err(|e| SiamError::Inference(format!("Failed to initialize VAD: {e}")))?;
         let segments = vad.split(samples, self.info.sample_rate as usize);
 
         let mut all_words = Vec::new();
@@ -384,7 +387,11 @@ impl Engine {
                     timestamp: now,
                 })
             }
-            Err(_) => None,
+            Err(e) => {
+                tracing::warn!("Flush failed, preserving audio buffer: {e}");
+                state.audio_buffer = samples;
+                None
+            }
         }
     }
 }

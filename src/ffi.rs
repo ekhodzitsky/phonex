@@ -59,14 +59,14 @@ pub unsafe extern "C" fn phonex_engine_new_with_pool_size(
     pool_size: usize,
 ) -> *mut PhonexEngine {
     if model_dir.is_null() {
-        eprintln!("phonex_engine_new_with_pool_size: model_dir is null");
+        tracing::error!("phonex_engine_new_with_pool_size: model_dir is null");
         return ptr::null_mut();
     }
 
     let dir_str = match unsafe { CStr::from_ptr(model_dir) }.to_str() {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("phonex_engine_new_with_pool_size: model_dir is not valid UTF-8: {e}");
+            tracing::error!("phonex_engine_new_with_pool_size: model_dir is not valid UTF-8: {e}");
             return ptr::null_mut();
         }
     };
@@ -80,7 +80,7 @@ pub unsafe extern "C" fn phonex_engine_new_with_pool_size(
             Box::into_raw(handle)
         }
         Err(e) => {
-            eprintln!("phonex_engine_new_with_pool_size: failed to load engine: {e}");
+            tracing::error!("phonex_engine_new_with_pool_size: failed to load engine: {e}");
             ptr::null_mut()
         }
     }
@@ -100,34 +100,38 @@ pub unsafe extern "C" fn phonex_transcribe_file(
     wav_path: *const c_char,
 ) -> *mut c_char {
     if engine.is_null() {
-        eprintln!("phonex_transcribe_file: engine is null");
+        tracing::error!("phonex_transcribe_file: engine is null");
         return ptr::null_mut();
     }
     if wav_path.is_null() {
-        eprintln!("phonex_transcribe_file: wav_path is null");
+        tracing::error!("phonex_transcribe_file: wav_path is null");
         return ptr::null_mut();
     }
 
     let path_str = match unsafe { CStr::from_ptr(wav_path) }.to_str() {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("phonex_transcribe_file: wav_path is not valid UTF-8: {e}");
+            tracing::error!("phonex_transcribe_file: wav_path is not valid UTF-8: {e}");
             return ptr::null_mut();
         }
     };
 
-    let engine_ref = unsafe { &(*engine).engine };
+    let engine_ref = unsafe { &*engine };
+    if engine_ref.disposed.load(Ordering::Acquire) {
+        tracing::error!("phonex_transcribe_file: engine is disposed");
+        return ptr::null_mut();
+    }
 
-    match engine_ref.transcribe_file(path_str) {
+    match engine_ref.engine.transcribe_file(path_str) {
         Ok(text) => match CString::new(text) {
             Ok(cstr) => cstr.into_raw(),
             Err(e) => {
-                eprintln!("phonex_transcribe_file: result contains interior NUL: {e}");
+                tracing::error!("phonex_transcribe_file: result contains interior NUL: {e}");
                 ptr::null_mut()
             }
         },
         Err(e) => {
-            eprintln!("phonex_transcribe_file: transcription failed: {e}");
+            tracing::error!("phonex_transcribe_file: transcription failed: {e}");
             ptr::null_mut()
         }
     }
@@ -153,13 +157,14 @@ pub unsafe extern "C" fn phonex_string_free(s: *mut c_char) {
 /// or `NULL` (in which case this is a no-op).
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn phonex_engine_free(engine: *mut PhonexEngine) {
-    if !engine.is_null() {
-        let disposed = unsafe { std::ptr::addr_of_mut!((*engine).disposed) };
-        if unsafe { (*disposed).swap(true, Ordering::Relaxed) } {
-            return;
-        }
-        let _ = unsafe { Box::from_raw(engine) };
+    if engine.is_null() {
+        return;
     }
+    let disposed = unsafe { std::ptr::addr_of_mut!((*engine).disposed) };
+    if unsafe { (*disposed).swap(true, Ordering::AcqRel) } {
+        return;
+    }
+    let _ = unsafe { Box::from_raw(engine) };
 }
 
 // ---------------------------------------------------------------------------
@@ -178,14 +183,14 @@ pub unsafe extern "C" fn phonex_stream_new(
     vad_path: *const c_char,
 ) -> *mut PhonexStream {
     if model_dir.is_null() {
-        eprintln!("phonex_stream_new: model_dir is null");
+        tracing::error!("phonex_stream_new: model_dir is null");
         return ptr::null_mut();
     }
 
     let dir_str = match unsafe { CStr::from_ptr(model_dir) }.to_str() {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("phonex_stream_new: model_dir is not valid UTF-8: {e}");
+            tracing::error!("phonex_stream_new: model_dir is not valid UTF-8: {e}");
             return ptr::null_mut();
         }
     };
@@ -196,7 +201,7 @@ pub unsafe extern "C" fn phonex_stream_new(
         match unsafe { CStr::from_ptr(vad_path) }.to_str() {
             Ok(s) => Some(s),
             Err(e) => {
-                eprintln!("phonex_stream_new: vad_path is not valid UTF-8: {e}");
+                tracing::error!("phonex_stream_new: vad_path is not valid UTF-8: {e}");
                 return ptr::null_mut();
             }
         }
@@ -205,7 +210,7 @@ pub unsafe extern "C" fn phonex_stream_new(
     let info = match ModelInfo::from_model_dir(dir_str) {
         Ok(i) => i,
         Err(e) => {
-            eprintln!("phonex_stream_new: failed to load model info: {e}");
+            tracing::error!("phonex_stream_new: failed to load model info: {e}");
             return ptr::null_mut();
         }
     };
@@ -219,7 +224,7 @@ pub unsafe extern "C" fn phonex_stream_new(
             Box::into_raw(handle)
         }
         Err(e) => {
-            eprintln!("phonex_stream_new: failed to create streaming pipeline: {e}");
+            tracing::error!("phonex_stream_new: failed to create streaming pipeline: {e}");
             ptr::null_mut()
         }
     }
@@ -240,18 +245,22 @@ pub unsafe extern "C" fn phonex_stream_process_chunk(
     len: usize,
 ) -> *mut c_char {
     if stream.is_null() {
-        eprintln!("phonex_stream_process_chunk: stream is null");
+        tracing::error!("phonex_stream_process_chunk: stream is null");
         return ptr::null_mut();
     }
     if samples.is_null() {
-        eprintln!("phonex_stream_process_chunk: samples is null");
+        tracing::error!("phonex_stream_process_chunk: samples is null");
         return ptr::null_mut();
     }
 
-    let stream_ref = unsafe { &mut (*stream).pipeline };
+    let stream_ref = unsafe { &*stream };
+    if stream_ref.disposed.load(Ordering::Acquire) {
+        tracing::error!("phonex_stream_process_chunk: stream is disposed");
+        return ptr::null_mut();
+    }
     let sample_slice = unsafe { std::slice::from_raw_parts(samples, len) };
 
-    match stream_ref.accept_audio(sample_slice) {
+    match unsafe { &mut (*stream).pipeline }.accept_audio(sample_slice) {
         Ok(tokens) => {
             let json = serde_json::to_string(&tokens).unwrap_or_else(|_| "[]".into());
             match CString::new(json) {
@@ -260,7 +269,7 @@ pub unsafe extern "C" fn phonex_stream_process_chunk(
             }
         }
         Err(e) => {
-            eprintln!("phonex_stream_process_chunk: inference failed: {e}");
+            tracing::error!("phonex_stream_process_chunk: inference failed: {e}");
             ptr::null_mut()
         }
     }
@@ -276,19 +285,23 @@ pub unsafe extern "C" fn phonex_stream_process_chunk(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn phonex_stream_flush(stream: *mut PhonexStream) -> *mut c_char {
     if stream.is_null() {
-        eprintln!("phonex_stream_flush: stream is null");
+        tracing::error!("phonex_stream_flush: stream is null");
         return ptr::null_mut();
     }
 
-    let stream_ref = unsafe { &mut (*stream).pipeline };
+    let stream_ref = unsafe { &*stream };
+    if stream_ref.disposed.load(Ordering::Acquire) {
+        tracing::error!("phonex_stream_flush: stream is disposed");
+        return ptr::null_mut();
+    }
 
-    match stream_ref.flush() {
+    match unsafe { &mut (*stream).pipeline }.flush() {
         Ok(text) => match CString::new(text) {
             Ok(cstr) => cstr.into_raw(),
             Err(_) => ptr::null_mut(),
         },
         Err(e) => {
-            eprintln!("phonex_stream_flush: flush failed: {e}");
+            tracing::error!("phonex_stream_flush: flush failed: {e}");
             ptr::null_mut()
         }
     }
@@ -305,13 +318,17 @@ pub unsafe extern "C" fn phonex_stream_flush(stream: *mut PhonexStream) -> *mut 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn phonex_stream_flush_with_tokens(stream: *mut PhonexStream) -> *mut c_char {
     if stream.is_null() {
-        eprintln!("phonex_stream_flush_with_tokens: stream is null");
+        tracing::error!("phonex_stream_flush_with_tokens: stream is null");
         return ptr::null_mut();
     }
 
-    let stream_ref = unsafe { &mut (*stream).pipeline };
+    let stream_ref = unsafe { &*stream };
+    if stream_ref.disposed.load(Ordering::Acquire) {
+        tracing::error!("phonex_stream_flush_with_tokens: stream is disposed");
+        return ptr::null_mut();
+    }
 
-    match stream_ref.flush_with_tokens() {
+    match unsafe { &mut (*stream).pipeline }.flush_with_tokens() {
         Ok((text, tokens)) => {
             let result = serde_json::json!({
                 "text": text,
@@ -324,7 +341,7 @@ pub unsafe extern "C" fn phonex_stream_flush_with_tokens(stream: *mut PhonexStre
             }
         }
         Err(e) => {
-            eprintln!("phonex_stream_flush_with_tokens: flush failed: {e}");
+            tracing::error!("phonex_stream_flush_with_tokens: flush failed: {e}");
             ptr::null_mut()
         }
     }
@@ -339,8 +356,11 @@ pub unsafe extern "C" fn phonex_stream_reset(stream: *mut PhonexStream) {
     if stream.is_null() {
         return;
     }
-    let stream_ref = unsafe { &mut (*stream).pipeline };
-    stream_ref.reset();
+    let stream_ref = unsafe { &*stream };
+    if stream_ref.disposed.load(Ordering::Acquire) {
+        return;
+    }
+    unsafe { &mut (*stream).pipeline }.reset();
 }
 
 /// Free a streaming session.
@@ -350,13 +370,14 @@ pub unsafe extern "C" fn phonex_stream_reset(stream: *mut PhonexStream) {
 /// or `NULL` (in which case this is a no-op).
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn phonex_stream_free(stream: *mut PhonexStream) {
-    if !stream.is_null() {
-        let disposed = unsafe { std::ptr::addr_of_mut!((*stream).disposed) };
-        if unsafe { (*disposed).swap(true, Ordering::Relaxed) } {
-            return;
-        }
-        let _ = unsafe { Box::from_raw(stream) };
+    if stream.is_null() {
+        return;
     }
+    let disposed = unsafe { std::ptr::addr_of_mut!((*stream).disposed) };
+    if unsafe { (*disposed).swap(true, Ordering::AcqRel) } {
+        return;
+    }
+    let _ = unsafe { Box::from_raw(stream) };
 }
 
 #[cfg(test)]

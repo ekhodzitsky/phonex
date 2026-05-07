@@ -54,11 +54,16 @@ impl AudioPreprocessor {
     }
 
     /// Simple linear interpolation resampler.
-    pub fn resample(&self, samples: &[f32], from_rate: usize) -> Vec<f32> {
+    pub fn resample(&self, samples: &[f32], from_rate: usize) -> crate::Result<Vec<f32>> {
         if from_rate == self.target_sample_rate {
-            return samples.to_vec();
+            return Ok(samples.to_vec());
         }
         let ratio = from_rate as f32 / self.target_sample_rate as f32;
+        if ratio > 16.0 || ratio < 1.0 / 16.0 {
+            return Err(crate::SiamError::Inference(format!(
+                "Resample ratio {ratio} out of safe bounds (1/16 .. 16)"
+            )));
+        }
         let out_len = (samples.len() as f32 / ratio) as usize;
         let mut out = Vec::with_capacity(out_len);
         for i in 0..out_len {
@@ -69,7 +74,7 @@ impl AudioPreprocessor {
             let s1 = samples.get(src_idx_floor + 1).copied().unwrap_or(s0);
             out.push(frac.mul_add(s1 - s0, s0));
         }
-        out
+        Ok(out)
     }
 
     /// Compute log-mel spectrogram from audio samples at target sample rate.

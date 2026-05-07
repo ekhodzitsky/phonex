@@ -83,6 +83,8 @@ pub struct LimitsConfig {
     pub rate_limit_per_minute: u32,
     pub max_ws_connections: usize,
     pub ws_idle_timeout_secs: u64,
+    #[serde(default)]
+    pub trust_proxy: bool,
 }
 
 impl Default for LimitsConfig {
@@ -92,6 +94,7 @@ impl Default for LimitsConfig {
             rate_limit_per_minute: 0,
             max_ws_connections: 100,
             ws_idle_timeout_secs: 60,
+            trust_proxy: false,
         }
     }
 }
@@ -99,11 +102,15 @@ impl Default for LimitsConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthConfig {
     pub api_key: Option<String>,
+    pub admin_api_key: Option<String>,
 }
 
 impl Default for AuthConfig {
     fn default() -> Self {
-        Self { api_key: None }
+        Self {
+            api_key: None,
+            admin_api_key: None,
+        }
     }
 }
 

@@ -73,7 +73,8 @@ impl StreamingEncoder {
 
         for name in &self.input_names {
             if name == "x" {
-                inputs.push((std::borrow::Cow::Borrowed("x"), x_owned.take().expect("x input should be present").into()));
+                let x_tensor = x_owned.take().ok_or_else(|| crate::SiamError::Inference("Encoder input 'x' missing".into()))?;
+                inputs.push((std::borrow::Cow::Borrowed("x"), x_tensor.into()));
             } else if name.starts_with("cached_") {
                 let state = self.states.get(name.as_str()).ok_or_else(|| {
                     crate::SiamError::Inference(format!("Missing encoder state: {}", name))
@@ -156,7 +157,13 @@ impl StreamingEncoder {
 
             self.states.insert(
                 name.clone(),
-                Self::zero_state_tensor(&name, shape).expect("infallible zeros tensor"),
+                match Self::zero_state_tensor(&name, shape) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        tracing::warn!("Failed to create zero state tensor: {e}");
+                        continue;
+                    }
+                }
             );
         }
     }

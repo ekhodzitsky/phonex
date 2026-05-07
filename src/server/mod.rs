@@ -39,6 +39,8 @@ pub struct RuntimeLimits {
     pub rate_limit_burst: u32,
     pub max_ws_connections: usize,
     pub api_key: Option<String>,
+    pub admin_api_key: Option<String>,
+    pub trust_proxy: bool,
     pub cors_origins: Vec<String>,
     pub ws_idle_timeout_secs: u64,
 }
@@ -51,6 +53,8 @@ impl Default for RuntimeLimits {
             rate_limit_burst: 10,
             max_ws_connections: 100,
             api_key: None,
+            admin_api_key: None,
+            trust_proxy: false,
             cors_origins: vec![
                 "http://localhost:3000".into(),
                 "http://localhost:5173".into(),
@@ -116,7 +120,11 @@ pub fn app_with_limits(
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list(allow_origins))
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
-        .allow_headers(tower_http::cors::Any);
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+            axum::http::header::HeaderName::from_static("x-request-id"),
+        ]);
 
     #[derive(OpenApi)]
     #[openapi(
@@ -155,6 +163,7 @@ pub fn app_with_limits(
         let limiter = Arc::new(rate_limit::RateLimiter::new(
             limits.rate_limit_per_minute,
             limits.rate_limit_burst,
+            limits.trust_proxy,
         ));
         router = router.layer(axum::middleware::from_fn_with_state(
             limiter,
@@ -194,7 +203,14 @@ pub async fn auth_middleware(
     req: axum::extract::Request,
     next: Next,
 ) -> Response {
-    if let Some(ref expected_key) = state.limits.api_key {
+    let is_admin = req.uri().path() == "/v1/admin/reload";
+    let expected_key = if is_admin {
+        state.limits.admin_api_key.as_ref().or(state.limits.api_key.as_ref())
+    } else {
+        state.limits.api_key.as_ref()
+    };
+
+    if let Some(expected_key) = expected_key {
         let valid = req
             .headers()
             .get("authorization")

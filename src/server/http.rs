@@ -114,17 +114,11 @@ fn api_pool_closed_error() -> ApiError {
 async fn checkout_triplet(
     engine: &Arc<Engine>,
 ) -> Result<
-    (
-        crate::inference::SessionTriplet,
-        crate::inference::OwnedReservation<crate::inference::SessionTriplet>,
-    ),
+    crate::inference::pool::CheckoutGuard<crate::inference::SessionTriplet>,
     ApiError,
 > {
     match tokio::time::timeout(std::time::Duration::from_secs(30), engine.pool.checkout()).await {
-        Ok(Ok(guard)) => {
-            let (triplet, reservation) = guard.into_owned();
-            Ok((triplet, reservation))
-        }
+        Ok(Ok(guard)) => Ok(guard.into_owned()),
         Ok(Err(_pool_closed)) => Err(api_pool_closed_error()),
         Err(_timeout) => Err(api_timeout_error()),
     }
@@ -237,6 +231,13 @@ async fn extract_audio_from_multipart(
         match field.name() {
             Some("audio") => {
                 if let Ok(data) = field.bytes().await {
+                    if data.len() > body_limit_bytes {
+                        return Err(api_error(
+                            StatusCode::PAYLOAD_TOO_LARGE,
+                            "Audio field exceeds the configured size limit",
+                            "field_too_large",
+                        ));
+                    }
                     audio_bytes = Some(data);
                 }
             }
@@ -261,14 +262,6 @@ async fn extract_audio_from_multipart(
             StatusCode::BAD_REQUEST,
             "Empty request body",
             "empty_body",
-        ));
-    }
-
-    if body.len() > body_limit_bytes {
-        return Err(api_error(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "Request body exceeds the configured size limit",
-            "payload_too_large",
         ));
     }
 
@@ -312,10 +305,10 @@ pub async fn transcribe(
     let use_vad = query.vad;
     let use_diarization = query.diarize;
     let engine = state.engine.read().await.clone();
-    let (triplet, reservation) = checkout_triplet(&engine).await?;
+    let guard = checkout_triplet(&engine).await?;
 
     let result = tokio::task::spawn_blocking(move || {
-        let mut triplet = triplet;
+        let mut guard = guard;
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             // Convert f32 LE bytes to Vec<f32>
             let samples_f32 = crate::inference::audio::bytes_to_f32_samples(&body);
@@ -323,48 +316,42 @@ pub async fn transcribe(
             let samples = if client_rate == crate::inference::TARGET_SAMPLE_RATE {
                 samples_f32
             } else {
-                crate::inference::audio::resample(&samples_f32, client_rate, crate::inference::TARGET_SAMPLE_RATE)
-                    .unwrap_or_default()
+                crate::inference::audio::resample(&samples_f32, client_rate, crate::inference::TARGET_SAMPLE_RATE)?
             };
             if use_diarization {
                 #[cfg(feature = "diarization")]
                 {
-                    engine.transcribe_samples_with_diarization(&samples, &mut triplet)
+                    engine.transcribe_samples_with_diarization(&samples, &mut *guard)
                 }
                 #[cfg(not(feature = "diarization"))]
                 {
-                    engine.transcribe_samples(&samples, &mut triplet)
+                    engine.transcribe_samples(&samples, &mut *guard)
                 }
             } else if use_vad {
-                engine.transcribe_samples_with_vad(&samples, &mut triplet)
+                engine.transcribe_samples_with_vad(&samples, &mut *guard)
             } else {
-                engine.transcribe_samples(&samples, &mut triplet)
+                engine.transcribe_samples(&samples, &mut *guard)
             }
         }));
         match r {
-            Ok(inference_result) => (inference_result, triplet),
+            Ok(inference_result) => inference_result,
             Err(_) => {
                 tracing::error!("Panic in REST transcribe — triplet recovered");
-                (
-                    Err(crate::SiamError::Inference("Inference thread panicked".into())),
-                    triplet,
-                )
+                Err(crate::SiamError::Inference("Inference thread panicked".into()))
             }
         }
     })
     .await;
 
     match result {
-        Ok((Ok(result), triplet)) => {
-            reservation.checkin(triplet);
+        Ok(Ok(result)) => {
             Ok(Json(TranscribeResponse {
                 text: result.text,
                 words: result.words,
                 duration: result.duration_s,
             }))
         }
-        Ok((Err(e), triplet)) => {
-            reservation.checkin(triplet);
+        Ok(Err(e)) => {
             tracing::error!("Transcription error: {e}");
             Err(api_error(
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -415,10 +402,10 @@ pub async fn transcribe_batch(
     }
 
     let engine = state.engine.read().await.clone();
-    let (triplet, reservation) = checkout_triplet(&engine).await?;
+    let guard = checkout_triplet(&engine).await?;
 
     let results = tokio::task::spawn_blocking(move || {
-        let mut triplet = triplet;
+        let mut guard = guard;
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             // Convert all files to f32 samples
             let mut sample_buffers: Vec<Vec<f32>> = Vec::with_capacity(files.len());
@@ -427,19 +414,17 @@ pub async fn transcribe_batch(
                 let samples = if *client_rate == crate::inference::TARGET_SAMPLE_RATE {
                     samples_f32
                 } else {
-                    crate::inference::audio::resample(&samples_f32, *client_rate, crate::inference::TARGET_SAMPLE_RATE)
-                        .unwrap_or_default()
+                    crate::inference::audio::resample(&samples_f32, *client_rate, crate::inference::TARGET_SAMPLE_RATE)?
                 };
                 sample_buffers.push(samples);
             }
 
             let refs: Vec<&[f32]> = sample_buffers.iter().map(|s| s.as_slice()).collect();
-            engine.transcribe_batch(refs, &mut triplet)
+            engine.transcribe_batch(refs, &mut *guard)
         }));
 
         match r {
             Ok(Ok(batch_results)) => {
-                reservation.checkin(triplet);
                 batch_results.into_iter().map(|result| TranscribeResponse {
                     text: result.text,
                     words: result.words,
@@ -447,7 +432,6 @@ pub async fn transcribe_batch(
                 }).collect::<Vec<_>>()
             }
             Ok(Err(e)) => {
-                reservation.checkin(triplet);
                 tracing::error!("Batch transcription error: {e}");
                 vec![TranscribeResponse {
                     text: String::new(),
@@ -456,7 +440,6 @@ pub async fn transcribe_batch(
                 }]
             }
             Err(_) => {
-                reservation.checkin(triplet);
                 tracing::error!("Panic in batch transcription");
                 vec![TranscribeResponse {
                     text: String::new(),
@@ -490,7 +473,7 @@ pub async fn transcribe_stream(
     };
     let (body, client_rate) = extract_audio_from_multipart(&mut multipart, &query, state.limits.body_limit_bytes).await?;
     let engine = state.engine.read().await.clone();
-    let (triplet, reservation) = checkout_triplet(&engine).await?;
+    let guard = checkout_triplet(&engine).await?;
 
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<crate::inference::TranscriptSegment, String>>(16);
 
@@ -498,14 +481,19 @@ pub async fn transcribe_stream(
     let cancel = state.shutdown.clone();
     let tracker = state.tracker.clone();
     tracker.spawn_blocking(move || {
-        let mut triplet = triplet;
+        let mut guard = guard;
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let samples_f32 = crate::inference::audio::bytes_to_f32_samples(&body);
             let samples = if client_rate == crate::inference::TARGET_SAMPLE_RATE {
                 samples_f32
             } else {
-                crate::inference::audio::resample(&samples_f32, client_rate, crate::inference::TARGET_SAMPLE_RATE)
-                    .unwrap_or_default()
+                match crate::inference::audio::resample(&samples_f32, client_rate, crate::inference::TARGET_SAMPLE_RATE) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        let _ = tx.blocking_send(Err(format!("{e}")));
+                        return;
+                    }
+                }
             };
 
             let mut stream_state = match engine.create_state(false) {
@@ -521,7 +509,7 @@ pub async fn transcribe_stream(
                 if cancel.is_cancelled() {
                     return;
                 }
-                match engine.process_chunk(chunk, &mut stream_state, &mut triplet) {
+                match engine.process_chunk(chunk, &mut stream_state, &mut *guard) {
                     Ok(segs) => {
                         for seg in segs {
                             if tx.blocking_send(Ok(seg)).is_err() {
@@ -537,7 +525,7 @@ pub async fn transcribe_stream(
             }
 
             if !cancel.is_cancelled()
-                && let Some(seg) = engine.flush_state(&mut stream_state, &mut triplet) {
+                && let Some(seg) = engine.flush_state(&mut stream_state, &mut *guard) {
                     let _ = tx.blocking_send(Ok(seg));
                 }
         }));
@@ -545,7 +533,7 @@ pub async fn transcribe_stream(
         if result.is_err() {
             tracing::error!("Panic in SSE inference task — triplet recovered");
         }
-        reservation.checkin(triplet);
+        // guard is dropped here, auto-checking-in the triplet
     });
 
     let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(|result| {
@@ -578,14 +566,47 @@ pub struct ReloadQuery {
     pub model_dir: Option<String>,
 }
 
+fn validate_model_dir(dir: &str) -> Result<std::path::PathBuf, ApiError> {
+    let path = std::path::Path::new(dir);
+
+    if !path.is_absolute() {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "Model directory must be an absolute path",
+            "invalid_model_dir",
+        ));
+    }
+
+    for component in path.components() {
+        if matches!(component, std::path::Component::ParentDir) {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                "Model directory cannot contain '..' components",
+                "invalid_model_dir",
+            ));
+        }
+    }
+
+    if !path.is_dir() {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "Model directory does not exist or is not a directory",
+            "invalid_model_dir",
+        ));
+    }
+
+    Ok(path.to_path_buf())
+}
+
 #[tracing::instrument(skip(state))]
 pub async fn reload(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ReloadQuery>,
 ) -> Result<Json<HealthResponse>, ApiError> {
-    let new_model_dir = query.model_dir.unwrap_or_else(|| {
-        state.model_dir.blocking_read().clone()
-    });
+    let new_model_dir = match query.model_dir {
+        Some(dir) => validate_model_dir(&dir)?.to_string_lossy().to_string(),
+        None => state.model_dir.read().await.clone(),
+    };
 
     tracing::info!(model_dir = %new_model_dir, "Hot-swapping model");
 

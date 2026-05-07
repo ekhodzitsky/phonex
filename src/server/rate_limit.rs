@@ -55,10 +55,11 @@ pub struct RateLimiter {
     capacity: u32,
     refill_per_ms: f64,
     effective_rpm: u32,
+    trust_proxy: bool,
 }
 
 impl RateLimiter {
-    pub fn new(rpm: u32, burst: u32) -> Self {
+    pub fn new(rpm: u32, burst: u32, trust_proxy: bool) -> Self {
         if rpm > MAX_RPM {
             tracing::warn!(
                 rpm,
@@ -73,6 +74,7 @@ impl RateLimiter {
             capacity: burst.max(1),
             refill_per_ms,
             effective_rpm,
+            trust_proxy,
         }
     }
 
@@ -109,21 +111,23 @@ fn unix_ms() -> u64 {
         .unwrap_or(0)
 }
 
-pub fn extract_client_ip(req: &Request) -> Option<IpAddr> {
-    let headers = req.headers();
-    if let Some(value) = headers.get("x-forwarded-for")
-        && let Ok(s) = value.to_str()
-    {
-        let first = s.split(',').next().unwrap_or("").trim();
-        if let Ok(ip) = first.parse::<IpAddr>() {
+pub fn extract_client_ip(req: &Request, trust_proxy: bool) -> Option<IpAddr> {
+    if trust_proxy {
+        let headers = req.headers();
+        if let Some(value) = headers.get("x-forwarded-for")
+            && let Ok(s) = value.to_str()
+        {
+            let first = s.split(',').next().unwrap_or("").trim();
+            if let Ok(ip) = first.parse::<IpAddr>() {
+                return Some(ip);
+            }
+        }
+        if let Some(value) = headers.get("x-real-ip")
+            && let Ok(s) = value.to_str()
+            && let Ok(ip) = s.trim().parse::<IpAddr>()
+        {
             return Some(ip);
         }
-    }
-    if let Some(value) = headers.get("x-real-ip")
-        && let Ok(s) = value.to_str()
-        && let Ok(ip) = s.trim().parse::<IpAddr>()
-    {
-        return Some(ip);
     }
     req.extensions()
         .get::<ConnectInfo<SocketAddr>>()
@@ -135,7 +139,7 @@ pub async fn rate_limit_middleware(
     req: Request,
     next: Next,
 ) -> Response {
-    let ip = extract_client_ip(&req).unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+    let ip = extract_client_ip(&req, limiter.trust_proxy).unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
     if limiter.check(ip) {
         next.run(req).await
     } else {

@@ -116,10 +116,10 @@ pub struct PoolGuard<'a, T> {
 }
 
 impl<T> PoolGuard<'_, T> {
-    pub fn into_owned(mut self) -> (T, OwnedReservation<T>) {
+    pub fn into_owned(mut self) -> CheckoutGuard<T> {
         let item = self.item.take().expect("PoolGuard::into_owned called after drop");
         let reservation = OwnedReservation { sender: self.pool.sender.clone() };
-        (item, reservation)
+        CheckoutGuard { item: Some(item), reservation: Some(reservation) }
     }
 }
 
@@ -139,7 +139,9 @@ impl<T> DerefMut for PoolGuard<'_, T> {
 impl<T> Drop for PoolGuard<'_, T> {
     fn drop(&mut self) {
         if let Some(item) = self.item.take() {
-            let _ = self.pool.sender.try_send(item);
+            if let Err(e) = self.pool.sender.try_send(item) {
+                tracing::warn!("PoolGuard drop failed to return item: {e}");
+            }
         }
     }
 }
@@ -151,6 +153,45 @@ pub struct OwnedReservation<T> {
 
 impl<T> OwnedReservation<T> {
     pub fn checkin(self, item: T) {
-        let _ = self.sender.try_send(item);
+        if let Err(e) = self.sender.send_blocking(item) {
+            tracing::warn!("OwnedReservation checkin failed (channel closed during shutdown): {e}");
+        }
+    }
+}
+
+/// RAII guard that auto-checks-in an item when dropped — used after [`PoolGuard::into_owned`].
+pub struct CheckoutGuard<T> {
+    item: Option<T>,
+    reservation: Option<OwnedReservation<T>>,
+}
+
+impl<T> CheckoutGuard<T> {
+    /// Take the inner item out of the guard. The caller becomes responsible for calling
+    /// [`OwnedReservation::checkin`] manually. Prefer letting the guard drop instead.
+    pub fn into_inner(mut self) -> (T, OwnedReservation<T>) {
+        let item = self.item.take().expect("CheckoutGuard::into_inner called after drop");
+        let reservation = self.reservation.take().expect("CheckoutGuard::into_inner called twice");
+        (item, reservation)
+    }
+}
+
+impl<T> Deref for CheckoutGuard<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        self.item.as_ref().expect("CheckoutGuard accessed after into_inner")
+    }
+}
+
+impl<T> DerefMut for CheckoutGuard<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.item.as_mut().expect("CheckoutGuard accessed after into_inner")
+    }
+}
+
+impl<T> Drop for CheckoutGuard<T> {
+    fn drop(&mut self) {
+        if let (Some(item), Some(reservation)) = (self.item.take(), self.reservation.take()) {
+            reservation.checkin(item);
+        }
     }
 }

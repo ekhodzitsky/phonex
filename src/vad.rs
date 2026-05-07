@@ -75,16 +75,16 @@ pub struct Vad {
 }
 
 impl Vad {
-    pub fn new(config: VadConfig) -> Self {
+    pub fn new(config: VadConfig) -> crate::Result<Self> {
         let segmenter = VadSegmenter::new(&config.model_path)
-            .expect("Failed to load VAD model")
+            .map_err(|e| crate::SiamError::Inference(format!("Failed to load VAD model: {e}")))?
             .with_thresholds(
                 config.speech_threshold,
                 config.min_speech_duration_ms,
                 config.min_silence_duration_ms,
                 config.speech_pad_ms,
             );
-        Self { segmenter }
+        Ok(Self { segmenter })
     }
 
     pub fn split(&mut self, samples: &[f32], _sample_rate: usize) -> Vec<(usize, usize)> {

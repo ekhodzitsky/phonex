@@ -6,7 +6,6 @@ use axum::response::Response;
 use futures_util::StreamExt;
 use std::sync::Arc;
 
-use crate::inference::Engine;
 use crate::protocol::{ClientMessage, ServerMessage};
 use crate::server::http::AppState;
 use crate::streaming_decoder::DecodeToken;
@@ -15,35 +14,56 @@ use crate::streaming_decoder::DecodeToken;
 /// Dispatches between true streaming (low latency) and chunked offline
 /// (works with any model) based on the loaded model type.
 enum WsPipeline {
-    Streaming(crate::streaming_pipeline::StreamingPipeline),
+    Streaming(Option<crate::streaming_pipeline::StreamingPipeline>),
     Chunked(crate::chunked_streaming::ChunkedStreamingPipeline),
 }
 
 impl WsPipeline {
     async fn accept_audio(&mut self, samples: &[f32]) -> crate::Result<Vec<DecodeToken>> {
         match self {
-            WsPipeline::Streaming(p) => std::future::ready(p.accept_audio(samples)).await,
+            WsPipeline::Streaming(p) => {
+                let samples = samples.to_vec();
+                let mut pipeline = p.take().expect("WsPipeline::Streaming is Some");
+                let (pipeline, result) = tokio::task::spawn_blocking(move || {
+                    let result = pipeline.accept_audio(&samples);
+                    (pipeline, result)
+                })
+                .await
+                .map_err(|e| crate::SiamError::Inference(format!("spawn_blocking error: {e}")))?;
+                *p = Some(pipeline);
+                result
+            }
             WsPipeline::Chunked(p) => p.accept_audio(samples).await,
         }
     }
 
     fn text(&self) -> String {
         match self {
-            WsPipeline::Streaming(p) => p.text(),
+            WsPipeline::Streaming(p) => p.as_ref().expect("WsPipeline::Streaming is Some").text(),
             WsPipeline::Chunked(p) => p.text(),
         }
     }
 
     async fn flush(&mut self) -> crate::Result<String> {
         match self {
-            WsPipeline::Streaming(p) => std::future::ready(p.flush()).await,
+            WsPipeline::Streaming(p) => {
+                let mut pipeline = p.take().expect("WsPipeline::Streaming is Some");
+                let (pipeline, result) = tokio::task::spawn_blocking(move || {
+                    let result = pipeline.flush();
+                    (pipeline, result)
+                })
+                .await
+                .map_err(|e| crate::SiamError::Inference(format!("spawn_blocking error: {e}")))?;
+                *p = Some(pipeline);
+                result
+            }
             WsPipeline::Chunked(p) => p.flush().await,
         }
     }
 
     fn reset(&mut self) {
         match self {
-            WsPipeline::Streaming(p) => p.reset(),
+            WsPipeline::Streaming(p) => p.as_mut().expect("WsPipeline::Streaming is Some").reset(),
             WsPipeline::Chunked(_p) => {
                 // Chunked pipeline does not have a reset method;
                 // clear state manually if needed.
@@ -97,7 +117,7 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
             &model_info,
             Some(vad_path),
         ) {
-            Ok(p) => WsPipeline::Streaming(p),
+            Ok(p) => WsPipeline::Streaming(Some(p)),
             Err(e) => {
                 let _ = send_error(
                     &mut socket,
@@ -326,15 +346,6 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         }
     };
 
-    // Checkout a triplet from the pool for this connection
-    let (mut triplet, reservation) = match checkout_triplet(&engine).await {
-        Ok(t) => t,
-        Err(_) => {
-            let _ = send_error(&mut socket, "Server busy", "pool_timeout", Some(30_000)).await;
-            return;
-        }
-    };
-
     let mut flushed = false;
 
     loop {
@@ -368,35 +379,40 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 // Push to streaming state
                 stream_state.audio_buffer.extend_from_slice(&samples);
 
-                // Check if we should process
+                // Check if we should process (checkout per-operation, not per-connection)
                 if stream_state.should_process() {
-                    match engine.process_chunk(&[], &mut stream_state, &mut triplet) {
-                        Ok(segments) => {
-                            for seg in segments {
-                                let msg = if seg.is_final {
-                                    ServerMessage::Final {
-                                        text: seg.text.to_string(),
-                                        timestamp: seg.timestamp,
-                                        words: seg.words.to_vec(),
+                    match engine.pool.try_checkout() {
+                        Some(mut guard) => match engine.process_chunk(&[], &mut stream_state, &mut guard) {
+                            Ok(segments) => {
+                                for seg in segments {
+                                    let msg = if seg.is_final {
+                                        ServerMessage::Final {
+                                            text: seg.text.to_string(),
+                                            timestamp: seg.timestamp,
+                                            words: seg.words.to_vec(),
+                                        }
+                                    } else {
+                                        ServerMessage::Partial {
+                                            text: seg.text.to_string(),
+                                            timestamp: seg.timestamp,
+                                            words: seg.words.to_vec(),
+                                        }
+                                    };
+                                    if socket
+                                        .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
+                                        .await
+                                        .is_err()
+                                    {
+                                        break;
                                     }
-                                } else {
-                                    ServerMessage::Partial {
-                                        text: seg.text.to_string(),
-                                        timestamp: seg.timestamp,
-                                        words: seg.words.to_vec(),
-                                    }
-                                };
-                                if socket
-                                    .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
-                                    .await
-                                    .is_err()
-                                {
-                                    break;
                                 }
                             }
-                        }
-                        Err(e) => {
-                            let _ = send_error(&mut socket, &format!("{e}"), "inference_error", None).await;
+                            Err(e) => {
+                                let _ = send_error(&mut socket, &format!("{e}"), "inference_error", None).await;
+                            }
+                        },
+                        None => {
+                            tracing::debug!("Pool empty, buffering audio for later");
                         }
                     }
                 }
@@ -411,7 +427,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                         stream_state.clear();
                     }
                     Ok(ClientMessage::Stop) => {
-                        if let Some(seg) = engine.flush_state(&mut stream_state, &mut triplet) {
+                        let seg = engine.pool.try_checkout()
+                            .and_then(|mut guard| engine.flush_state(&mut stream_state, &mut guard));
+                        if let Some(seg) = seg {
                             let msg = ServerMessage::Final {
                                 text: seg.text.to_string(),
                                 timestamp: seg.timestamp,
@@ -443,9 +461,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                                 stream_state.clear();
                             }
                             "STOP" => {
-                                if let Some(seg) =
-                                    engine.flush_state(&mut stream_state, &mut triplet)
-                                {
+                                let seg = engine.pool.try_checkout()
+                                    .and_then(|mut guard| engine.flush_state(&mut stream_state, &mut guard));
+                                if let Some(seg) = seg {
                                     let msg = ServerMessage::Final {
                                         text: seg.text.to_string(),
                                         timestamp: seg.timestamp,
@@ -470,44 +488,19 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         }
     }
 
-    if !flushed
-        && let Some(seg) = engine.flush_state(&mut stream_state, &mut triplet)
-    {
-        let msg = ServerMessage::Final {
-            text: seg.text.to_string(),
-            timestamp: seg.timestamp,
-            words: seg.words.to_vec(),
-        };
-        let _ = socket
-            .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
-            .await;
-    }
-
-    // Return triplet to pool
-    reservation.checkin(triplet);
-}
-
-async fn checkout_triplet(
-    engine: &Arc<Engine>,
-) -> Result<
-    (
-        crate::inference::SessionTriplet,
-        crate::inference::OwnedReservation<crate::inference::SessionTriplet>,
-    ),
-    (), // FIXME: proper error type
-> {
-    match tokio::time::timeout(
-        std::time::Duration::from_secs(30),
-        engine.pool.checkout(),
-    )
-    .await
-    {
-        Ok(Ok(guard)) => {
-            let (triplet, reservation) = guard.into_owned();
-            Ok((triplet, reservation))
+    if !flushed {
+        let seg = engine.pool.try_checkout()
+            .and_then(|mut guard| engine.flush_state(&mut stream_state, &mut guard));
+        if let Some(seg) = seg {
+            let msg = ServerMessage::Final {
+                text: seg.text.to_string(),
+                timestamp: seg.timestamp,
+                words: seg.words.to_vec(),
+            };
+            let _ = socket
+                .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
+                .await;
         }
-        Ok(Err(_)) => Err(()),
-        Err(_) => Err(()),
     }
 }
 
