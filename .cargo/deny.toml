@@ -1,0 +1,30 @@
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "Zlib",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.8
+
+[[licenses.exceptions]]
+name = "ort"
+allow = ["MIT"]
+
+[advisories]
+yanked = "warn"
+ignore = [
+    # number_prefix is unmaintained but only used by indicatif (progress bars).
+    # No security vulnerability — just lack of active maintenance.
+    "RUSTSEC-2025-0119",
+    # rustls-pemfile is unmaintained but only used for TLS cert parsing.
+    # No security vulnerability — functionality is stable.
+    "RUSTSEC-2025-0134",
+]
+
+[bans]
+wildcards = "deny"
