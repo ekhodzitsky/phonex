@@ -13,17 +13,13 @@ jobs:
     name: Build binaries (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             onnx_arch: x64
             onnx_dir: onnxruntime-linux-x64-1.25.1
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            onnx_arch: aarch64
-            onnx_dir: onnxruntime-linux-aarch64-1.25.1
-            cross: true
           - target: aarch64-apple-darwin
             os: macos-latest
             onnx_arch: none
@@ -58,25 +54,13 @@ jobs:
           echo "DYLD_LIBRARY_PATH=$(brew --prefix onnxruntime)/lib" >> $GITHUB_ENV
           echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
 
-      - name: Install cross
-        if: matrix.cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
       - name: Build release binaries
         run: |
-          if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }} --bin phonex --bin server --bin streaming
-          else
-            cargo build --release --target ${{ matrix.target }} --bin phonex --bin server --bin streaming
-          fi
+          cargo build --release --target ${{ matrix.target }} --bin phonex --bin server --bin streaming
 
       - name: Build FFI library
         run: |
-          if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }} --features ffi --no-default-features
-          else
-            cargo build --release --target ${{ matrix.target }} --features ffi --no-default-features
-          fi
+          cargo build --release --target ${{ matrix.target }} --features ffi --no-default-features
 
       - name: Package binaries
         run: |
