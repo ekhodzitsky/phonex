@@ -81,6 +81,7 @@ impl Default for RuntimeLimits {
 }
 
 /// Async shutdown signal handler (SIGTERM / SIGINT).
+#[cfg(unix)]
 pub async fn shutdown_signal() {
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .expect("Failed to install SIGTERM handler");
@@ -91,6 +92,15 @@ pub async fn shutdown_signal() {
         _ = sigterm.recv() => tracing::info!("Received SIGTERM"),
         _ = sigint.recv() => tracing::info!("Received SIGINT"),
     }
+}
+
+/// Async shutdown signal handler for Windows (Ctrl-C only).
+#[cfg(windows)]
+pub async fn shutdown_signal() {
+    tokio::signal::ctrl_c()
+        .await
+        .expect("Failed to install Ctrl-C handler");
+    tracing::info!("Received Ctrl-C");
 }
 
 /// Build the axum router with all routes and middleware (default limits).

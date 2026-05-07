@@ -255,6 +255,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(unix)]
 async fn shutdown_signal() {
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .expect("Failed to install SIGTERM handler");
@@ -265,4 +266,12 @@ async fn shutdown_signal() {
         _ = sigterm.recv() => tracing::info!("Received SIGTERM"),
         _ = sigint.recv() => tracing::info!("Received SIGINT"),
     }
+}
+
+#[cfg(windows)]
+async fn shutdown_signal() {
+    tokio::signal::ctrl_c()
+        .await
+        .expect("Failed to install Ctrl-C handler");
+    tracing::info!("Received Ctrl-C");
 }
