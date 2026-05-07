@@ -16,7 +16,7 @@
 //!
 //! Target for streaming: RTF < 0.1  (process 1 s of audio in < 100 ms).
 
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 
 const SAMPLE_RATE: f32 = 16000.0;
 const CHUNK_SAMPLES: usize = 320; // 20 ms @ 16 kHz

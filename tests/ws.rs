@@ -6,12 +6,14 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
-use phonex::inference::pool::SessionPool;
 use phonex::inference::Engine;
+use phonex::inference::pool::SessionPool;
 use phonex::tokenizer::Tokenizer;
 
 fn test_engine() -> (Arc<Engine>, phonex::model_config::ModelInfo) {
-    let paths = phonex::model_config::discover_model_files("models/sherpa-onnx-zipformer-thai-2024-06-20").unwrap();
+    let paths =
+        phonex::model_config::discover_model_files("models/sherpa-onnx-zipformer-thai-2024-06-20")
+            .unwrap();
     let tokenizer = Arc::new(
         Tokenizer::from_file(
             paths.tokenizer.to_str().unwrap_or(""),
@@ -44,7 +46,11 @@ fn test_engine() -> (Arc<Engine>, phonex::model_config::ModelInfo) {
 #[ignore = "requires ONNX model files"]
 async fn test_ws_v1_stream_config_chunk_finalize() {
     let (engine, info) = test_engine();
-    let app = phonex::server::app(engine, "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(), info);
+    let app = phonex::server::app(
+        engine,
+        "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
+        info,
+    );
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr: SocketAddr = listener.local_addr().unwrap();
@@ -65,7 +71,10 @@ async fn test_ws_v1_stream_config_chunk_finalize() {
         "sample_rate": 16000,
         "language": "en",
     });
-    ws_stream.send(Message::Text(config.to_string().into())).await.unwrap();
+    ws_stream
+        .send(Message::Text(config.to_string().into()))
+        .await
+        .unwrap();
 
     // Send a tiny chunk of silence (f32 LE)
     let silence: Vec<f32> = vec![0.0f32; 160]; // 10ms @ 16kHz
@@ -74,7 +83,10 @@ async fn test_ws_v1_stream_config_chunk_finalize() {
 
     // Send finalize
     let finalize = serde_json::json!({ "type": "finalize" });
-    ws_stream.send(Message::Text(finalize.to_string().into())).await.unwrap();
+    ws_stream
+        .send(Message::Text(finalize.to_string().into()))
+        .await
+        .unwrap();
 
     // Collect responses
     let mut got_ready = false;

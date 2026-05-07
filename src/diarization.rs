@@ -24,9 +24,13 @@ impl DiarizationEngine {
         window_samples: usize,
         pool_size: usize,
     ) -> anyhow::Result<Self> {
-        let extractor = OnnxEmbeddingExtractor::new(model_path, embedding_dim, window_samples, pool_size)?;
+        let extractor =
+            OnnxEmbeddingExtractor::new(model_path, embedding_dim, window_samples, pool_size)?;
         let diarizer = OfflineDiarizer::new(DiarizationConfig::default());
-        Ok(Self { diarizer, extractor })
+        Ok(Self {
+            diarizer,
+            extractor,
+        })
     }
 
     /// Run diarization on a mono f32 audio buffer at 16 kHz.
@@ -37,15 +41,12 @@ impl DiarizationEngine {
 }
 
 /// Assign speaker IDs to transcribed words based on diarization turns.
-pub fn assign_speakers(
-    words: &mut [crate::inference::WordInfo],
-    turns: &[SpeakerTurn],
-) {
+pub fn assign_speakers(words: &mut [crate::inference::WordInfo], turns: &[SpeakerTurn]) {
     for word in words.iter_mut() {
         let word_mid = (word.start + word.end) / 2.0;
         for turn in turns {
             if word_mid >= turn.time.start && word_mid <= turn.time.end {
-                word.speaker = Some(turn.speaker.0 as u32);
+                word.speaker = Some(turn.speaker.0);
                 break;
             }
         }

@@ -51,7 +51,10 @@ impl ChunkedStreamingPipeline {
 
         let force_transcribe = self.speech_buffer.len() > MAX_SPEECH_BUFFER_SAMPLES;
         if force_transcribe {
-            tracing::warn!("Speech buffer exceeded {}s, forcing transcription", MAX_SPEECH_BUFFER_SECONDS);
+            tracing::warn!(
+                "Speech buffer exceeded {}s, forcing transcription",
+                MAX_SPEECH_BUFFER_SECONDS
+            );
         }
 
         if (speech_ended || force_transcribe) && !self.speech_buffer.is_empty() {
@@ -72,20 +75,28 @@ impl ChunkedStreamingPipeline {
     /// Return accumulated text so far.
     pub fn text(&self) -> String {
         // Concatenate token texts.
-        self.all_tokens.iter().map(|t| t.text.as_str()).collect::<Vec<_>>().concat()
+        self.all_tokens
+            .iter()
+            .map(|t| t.text.as_str())
+            .collect::<Vec<_>>()
+            .concat()
     }
 
     async fn transcribe_buffer(&mut self) -> crate::Result<Vec<DecodeToken>> {
         let engine = self.engine.clone();
         let samples = std::mem::take(&mut self.speech_buffer);
-        let guard = self.engine.pool.checkout().await
+        let guard = self
+            .engine
+            .pool
+            .checkout()
+            .await
             .map_err(|_| crate::SiamError::Inference("Pool empty".into()))?;
         let guard = guard.into_owned();
         let offset = self.global_time_offset;
 
         let result = tokio::task::spawn_blocking(move || {
             let mut guard = guard;
-            engine.transcribe_samples(&samples, &mut *guard)
+            engine.transcribe_samples(&samples, &mut guard)
         })
         .await
         .map_err(|e| crate::SiamError::Inference(format!("spawn_blocking error: {e}")))?;

@@ -12,7 +12,7 @@ pub mod grpc;
 
 use axum::Router;
 use axum::extract::{DefaultBodyLimit, State};
-use axum::http::{header, StatusCode};
+use axum::http::{StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Json, Response};
 use std::sync::Arc;
@@ -78,8 +78,18 @@ pub async fn shutdown_signal() {
 }
 
 /// Build the axum router with all routes and middleware (default limits).
-pub fn app(engine: Arc<Engine>, model_dir: String, model_info: crate::model_config::ModelInfo) -> Router {
-    app_with_limits(engine, model_dir, model_info, RuntimeLimits::default(), tokio_util::sync::CancellationToken::new())
+pub fn app(
+    engine: Arc<Engine>,
+    model_dir: String,
+    model_info: crate::model_config::ModelInfo,
+) -> Router {
+    app_with_limits(
+        engine,
+        model_dir,
+        model_info,
+        RuntimeLimits::default(),
+        tokio_util::sync::CancellationToken::new(),
+    )
 }
 
 /// Build the axum router with all routes and middleware.
@@ -92,7 +102,11 @@ pub fn app_with_limits(
 ) -> Router {
     let metrics_registry = Arc::new(metrics::MetricsRegistry::new());
     metrics_registry.register_counter("requests_total", "Total HTTP requests");
-    metrics_registry.register_histogram("request_duration_seconds", "HTTP request duration", metrics::DEFAULT_BUCKETS);
+    metrics_registry.register_histogram(
+        "request_duration_seconds",
+        "HTTP request duration",
+        metrics::DEFAULT_BUCKETS,
+    );
     metrics_registry.register_counter("ws_connections_total", "Total WebSocket connections");
     metrics_registry.register_counter("ws_messages_total", "Total WebSocket messages");
 
@@ -147,9 +161,18 @@ pub fn app_with_limits(
         .route("/health", axum::routing::get(http::health))
         .route("/v1/models", axum::routing::get(http::models))
         .route("/v1/transcribe", axum::routing::post(http::transcribe))
-        .route("/v1/transcribe/batch", axum::routing::post(http::transcribe_batch))
-        .route("/v1/transcribe/stream", axum::routing::post(http::transcribe_stream))
-        .route("/v1/transcribe/stream", axum::routing::get(ws::ws_v1_transcribe_stream))
+        .route(
+            "/v1/transcribe/batch",
+            axum::routing::post(http::transcribe_batch),
+        )
+        .route(
+            "/v1/transcribe/stream",
+            axum::routing::post(http::transcribe_stream),
+        )
+        .route(
+            "/v1/transcribe/stream",
+            axum::routing::get(ws::ws_v1_transcribe_stream),
+        )
         .route("/v1/admin/reload", axum::routing::post(http::reload))
         .route("/metrics", axum::routing::get(http::metrics))
         .route("/stream", axum::routing::get(ws::ws_handler))
@@ -185,14 +208,14 @@ pub fn app_with_limits(
 
 /// Request ID middleware — attaches a unique request ID to every request.
 /// The ID is propagated via `x-request-id` header (response) and tracing span.
-pub async fn request_id_middleware(
-    req: axum::extract::Request,
-    next: Next,
-) -> Response {
+pub async fn request_id_middleware(req: axum::extract::Request, next: Next) -> Response {
     let request_id = uuid::Uuid::new_v4().to_string();
-    let span = tracing::info_span!("request", %request_id, method = %req.method(), uri = %req.uri());
+    let span =
+        tracing::info_span!("request", %request_id, method = %req.method(), uri = %req.uri());
     let mut response = next.run(req).instrument(span).await;
-    response.headers_mut().insert("x-request-id", request_id.parse().unwrap());
+    response
+        .headers_mut()
+        .insert("x-request-id", request_id.parse().unwrap());
     response
 }
 
@@ -206,7 +229,11 @@ pub async fn auth_middleware(
     let path = req.uri().path();
     let is_admin = path == "/v1/admin/reload" || path == "/metrics";
     let expected_key = if is_admin {
-        state.limits.admin_api_key.as_ref().or(state.limits.api_key.as_ref())
+        state
+            .limits
+            .admin_api_key
+            .as_ref()
+            .or(state.limits.api_key.as_ref())
     } else {
         state.limits.api_key.as_ref()
     };
@@ -217,7 +244,8 @@ pub async fn auth_middleware(
             .get("authorization")
             .and_then(|h| h.to_str().ok())
             .is_some_and(|s| {
-                s.strip_prefix("Bearer ").is_some_and(|token| token == expected_key)
+                s.strip_prefix("Bearer ")
+                    .is_some_and(|token| token == expected_key)
             });
         if !valid {
             return (

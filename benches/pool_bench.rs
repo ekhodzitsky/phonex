@@ -3,7 +3,7 @@
 //! This validates that the new `CheckoutGuard` does not add significant
 //! overhead compared to a plain `PoolGuard` drop.
 
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use phonex::inference::pool::Pool;
 
 fn bench_pool_cycle(c: &mut Criterion) {

@@ -4,13 +4,15 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
-use phonex::inference::pool::SessionPool;
 use phonex::inference::Engine;
+use phonex::inference::pool::SessionPool;
 use phonex::tokenizer::Tokenizer;
 use std::sync::Arc;
 
 fn test_engine() -> (Arc<Engine>, phonex::model_config::ModelInfo) {
-    let paths = phonex::model_config::discover_model_files("models/sherpa-onnx-zipformer-thai-2024-06-20").unwrap();
+    let paths =
+        phonex::model_config::discover_model_files("models/sherpa-onnx-zipformer-thai-2024-06-20")
+            .unwrap();
     let tokenizer = Arc::new(
         Tokenizer::from_file(
             paths.tokenizer.to_str().unwrap_or(""),
@@ -42,14 +44,25 @@ fn test_engine() -> (Arc<Engine>, phonex::model_config::ModelInfo) {
 #[tokio::test]
 async fn test_health() {
     let (engine, info) = test_engine();
-    let app = phonex::server::app(engine, "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(), info);
+    let app = phonex::server::app(
+        engine,
+        "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
+        info,
+    );
     let response = app
-        .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["status"], "ok");
     assert_eq!(json["model"], "sherpa-onnx-zipformer-th");
@@ -58,14 +71,25 @@ async fn test_health() {
 #[tokio::test]
 async fn test_models() {
     let (engine, info) = test_engine();
-    let app = phonex::server::app(engine, "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(), info);
+    let app = phonex::server::app(
+        engine,
+        "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
+        info,
+    );
     let response = app
-        .oneshot(Request::builder().uri("/v1/models").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/v1/models")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["id"], "sherpa-onnx-zipformer-th");
     assert_eq!(json["vocab_size"], 2000);
@@ -75,14 +99,25 @@ async fn test_models() {
 #[tokio::test]
 async fn test_metrics() {
     let (engine, info) = test_engine();
-    let app = phonex::server::app(engine, "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(), info);
+    let app = phonex::server::app(
+        engine,
+        "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
+        info,
+    );
     let response = app
-        .oneshot(Request::builder().uri("/metrics").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/metrics")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let text = String::from_utf8(body.to_vec()).unwrap();
     assert!(text.contains("# HELP"));
     assert!(text.contains("# TYPE"));
@@ -91,7 +126,11 @@ async fn test_metrics() {
 #[tokio::test]
 async fn test_transcribe_empty_body() {
     let (engine, info) = test_engine();
-    let app = phonex::server::app(engine, "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(), info);
+    let app = phonex::server::app(
+        engine,
+        "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
+        info,
+    );
 
     let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
     let body = format!(
@@ -103,7 +142,10 @@ async fn test_transcribe_empty_body() {
             Request::builder()
                 .uri("/v1/transcribe")
                 .method("POST")
-                .header("content-type", format!("multipart/form-data; boundary={boundary}"))
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
                 .body(Body::from(body))
                 .unwrap(),
         )
@@ -117,7 +159,11 @@ async fn test_transcribe_empty_body() {
 #[tokio::test]
 async fn test_reload_bad_model_dir() {
     let (engine, info) = test_engine();
-    let app = phonex::server::app(engine, "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(), info);
+    let app = phonex::server::app(
+        engine,
+        "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
+        info,
+    );
 
     let response = app
         .oneshot(

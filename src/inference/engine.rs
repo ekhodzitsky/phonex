@@ -65,22 +65,23 @@ impl Engine {
     /// Build a test-only engine with an empty pool.
     #[cfg(test)]
     pub fn test_stub() -> Self {
-        let info = ModelInfo::from_model_dir("models/sherpa-onnx-zipformer-thai-2024-06-20").unwrap_or_else(|_| ModelInfo {
-            sample_rate: 16000,
-            n_mels: 80,
-            blank_id: 0,
-            context_size: 2,
-            d_model: 512,
-            vocab_size: 2000,
-            encoder_inputs: vec!["x".into(), "x_lens".into()],
-            encoder_outputs: vec!["encoder_out".into(), "encoder_out_lens".into()],
-            decoder_inputs: vec!["y".into()],
-            decoder_outputs: vec!["decoder_out".into()],
-            joiner_inputs: vec!["encoder_out".into(), "decoder_out".into()],
-            joiner_outputs: vec!["logit".into()],
-            model_id: "sherpa-onnx-zipformer-thai-2024-06-20".into(),
-            model_name: "Sherpa-ONNX Zipformer".into(),
-        });
+        let info = ModelInfo::from_model_dir("models/sherpa-onnx-zipformer-thai-2024-06-20")
+            .unwrap_or_else(|_| ModelInfo {
+                sample_rate: 16000,
+                n_mels: 80,
+                blank_id: 0,
+                context_size: 2,
+                d_model: 512,
+                vocab_size: 2000,
+                encoder_inputs: vec!["x".into(), "x_lens".into()],
+                encoder_outputs: vec!["encoder_out".into(), "encoder_out_lens".into()],
+                decoder_inputs: vec!["y".into()],
+                decoder_outputs: vec!["decoder_out".into()],
+                joiner_inputs: vec!["encoder_out".into(), "decoder_out".into()],
+                joiner_outputs: vec!["logit".into()],
+                model_id: "sherpa-onnx-zipformer-thai-2024-06-20".into(),
+                model_name: "Sherpa-ONNX Zipformer".into(),
+            });
         Self {
             pool: SessionPool::new(vec![]),
             mel: MelSpectrogram::new(),
@@ -144,10 +145,8 @@ impl Engine {
         let duration_s = samples.len() as f64 / self.info.sample_rate as f64;
 
         let (features_flat, num_frames) = self.mel.compute(samples);
-        let mel = Array3::from_shape_vec(
-            (1, num_frames, self.info.n_mels),
-            features_flat,
-        ).map_err(SiamError::Shape)?;
+        let mel = Array3::from_shape_vec((1, num_frames, self.info.n_mels), features_flat)
+            .map_err(SiamError::Shape)?;
 
         let mut decoder = GreedyDecoder::new(
             &mut triplet.encoder,
@@ -159,13 +158,16 @@ impl Engine {
 
         let (text, tokens) = decoder.transcribe_offline_with_tokens(&mel)?;
 
-        let words = tokens.into_iter().map(|t| super::streaming::WordInfo {
-            word: t.text,
-            start: t.start,
-            end: t.end.min(duration_s),
-            confidence: t.confidence,
-            speaker: None,
-        }).collect();
+        let words = tokens
+            .into_iter()
+            .map(|t| super::streaming::WordInfo {
+                word: t.text,
+                start: t.start,
+                end: t.end.min(duration_s),
+                confidence: t.confidence,
+                speaker: None,
+            })
+            .collect();
 
         Ok(TranscribeResult {
             text,
@@ -188,7 +190,9 @@ impl Engine {
         } else {
             crate::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)?
         };
-        let mut guard = self.pool.try_checkout()
+        let mut guard = self
+            .pool
+            .try_checkout()
             .ok_or_else(|| SiamError::Inference("Pool empty".into()))?;
         self.transcribe_samples(&samples, &mut guard)
     }
@@ -231,10 +235,9 @@ impl Engine {
             }
         }
 
-        let batch_mel = Array3::from_shape_vec(
-            (batch_size, max_frames, self.info.n_mels),
-            batch_data,
-        ).map_err(SiamError::Shape)?;
+        let batch_mel =
+            Array3::from_shape_vec((batch_size, max_frames, self.info.n_mels), batch_data)
+                .map_err(SiamError::Shape)?;
         let lengths = Array1::from_vec(lengths_vec);
 
         // 3. Batch encode
@@ -255,13 +258,16 @@ impl Engine {
             let duration_s = samples[b].len() as f64 / self.info.sample_rate as f64;
             let (text, tokens) = decoder.decode_sample(&encoded, b, max_t)?;
 
-            let words = tokens.into_iter().map(|t| super::streaming::WordInfo {
-                word: t.text,
-                start: t.start,
-                end: t.end.min(duration_s),
-                confidence: t.confidence,
-                speaker: None,
-            }).collect();
+            let words = tokens
+                .into_iter()
+                .map(|t| super::streaming::WordInfo {
+                    word: t.text,
+                    start: t.start,
+                    end: t.end.min(duration_s),
+                    confidence: t.confidence,
+                    speaker: None,
+                })
+                .collect();
 
             results.push(TranscribeResult {
                 text,
@@ -281,7 +287,8 @@ impl Engine {
         let mut vad = Vad::new(VadConfig {
             model_path: "models/silero_vad.onnx".into(),
             ..VadConfig::default()
-        }).map_err(|e| SiamError::Inference(format!("Failed to initialize VAD: {e}")))?;
+        })
+        .map_err(|e| SiamError::Inference(format!("Failed to initialize VAD: {e}")))?;
         let segments = vad.split(samples, self.info.sample_rate as usize);
 
         let mut all_words = Vec::new();
@@ -397,5 +404,3 @@ impl Engine {
         }
     }
 }
-
-

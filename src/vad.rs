@@ -39,7 +39,9 @@ impl SileroVad {
         assert_eq!(samples.len(), 512, "SileroVAD expects exactly 512 samples");
 
         // Fill pre-allocated input buffer: context (64) + new samples (512)
-        self.input_buf.slice_mut(ndarray::s![.., ..64]).assign(&self.context);
+        self.input_buf
+            .slice_mut(ndarray::s![.., ..64])
+            .assign(&self.context);
         for (i, &s) in samples.iter().enumerate() {
             self.input_buf[[0, 64 + i]] = s;
         }
@@ -63,7 +65,8 @@ impl SileroVad {
         self.state.assign(&state_out);
 
         // Update context to the last 64 samples of the current input window.
-        self.context.assign(&self.input_buf.slice(ndarray::s![.., 512..]));
+        self.context
+            .assign(&self.input_buf.slice(ndarray::s![.., 512..]));
 
         Ok(prob)
     }
@@ -285,10 +288,7 @@ impl StreamingVad {
         const WINDOW_SIZE: usize = 512;
 
         while self.buffer.len() >= WINDOW_SIZE {
-            let prob = self
-                .vad
-                .process(&self.buffer[..WINDOW_SIZE])
-                .unwrap_or(0.0);
+            let prob = self.vad.process(&self.buffer[..WINDOW_SIZE]).unwrap_or(0.0);
 
             match self.state {
                 VadState::Silence => {

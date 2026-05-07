@@ -3,17 +3,17 @@
 //! Generic on-device speech-to-text powered by Sherpa-ONNX Zipformer via ONNX Runtime.
 
 pub mod audio;
-pub mod encoder;
+pub mod chunked_streaming;
+pub mod config;
 pub mod decoder;
 #[cfg(feature = "diarization")]
 pub mod diarization;
+pub mod encoder;
 pub mod error;
 pub mod inference;
 pub mod joiner;
 pub mod model;
 pub mod model_config;
-pub mod chunked_streaming;
-pub mod config;
 #[cfg(feature = "server")]
 pub mod protocol;
 #[cfg(feature = "server")]

@@ -5,9 +5,9 @@ use std::sync::Arc;
 use ndarray::{Array2, Array3};
 
 use crate::decoder::SherpaDecoder;
-use crate::joiner::SherpaJoiner;
 use crate::inference::decode::argmax_logit_with_confidence;
 use crate::inference::features::phonex_fbank_options;
+use crate::joiner::SherpaJoiner;
 use crate::model_config::{ModelInfo, discover_model_files};
 use crate::streaming_decoder::DecodeToken;
 use crate::streaming_encoder::StreamingEncoder;
@@ -48,19 +48,11 @@ impl StreamingPipeline {
     ) -> crate::Result<Self> {
         let paths = discover_model_files(model_dir)?;
 
-        let encoder = StreamingEncoder::new(
-            paths.encoder.to_str().unwrap_or(""),
-        )?;
+        let encoder = StreamingEncoder::new(paths.encoder.to_str().unwrap_or(""))?;
         let chunk_frames = encoder.chunk_frames();
         let chunk_shift = encoder.chunk_shift();
-        let decoder = SherpaDecoder::new(
-            paths.decoder.to_str().unwrap_or(""),
-            info,
-        )?;
-        let joiner = SherpaJoiner::new(
-            paths.joiner.to_str().unwrap_or(""),
-            info,
-        )?;
+        let decoder = SherpaDecoder::new(paths.decoder.to_str().unwrap_or(""), info)?;
+        let joiner = SherpaJoiner::new(paths.joiner.to_str().unwrap_or(""), info)?;
         let tokenizer = Arc::new(Tokenizer::from_file(
             paths.tokenizer.to_str().unwrap_or(""),
             paths.tokens.to_str().unwrap_or(""),
@@ -149,7 +141,8 @@ impl StreamingPipeline {
     fn extract_chunk(&self, start: usize, num_frames: usize) -> Vec<f32> {
         let mut out = vec![0.0f32; num_frames * self.n_mels];
         for f in 0..num_frames {
-            let frame = self.online
+            let frame = self
+                .online
                 .get_frame(start + f)
                 .expect("frame index < num_frames_ready");
             out[f * self.n_mels..(f + 1) * self.n_mels].copy_from_slice(&frame[..self.n_mels]);
@@ -219,7 +212,10 @@ impl StreamingPipeline {
     /// Finalize decoding and return both text and word-level timestamps.
     pub fn flush_with_tokens(&mut self) -> crate::Result<(String, Vec<DecodeToken>)> {
         self.online.input_finished();
-        let remaining = self.online.num_frames_ready().saturating_sub(self.next_frame_idx);
+        let remaining = self
+            .online
+            .num_frames_ready()
+            .saturating_sub(self.next_frame_idx);
         if remaining > 0 {
             let chunk = self.extract_chunk(self.next_frame_idx, remaining);
             let mut padded = vec![0.0f32; self.chunk_frames * self.n_mels];
@@ -274,10 +270,6 @@ impl StreamingPipeline {
         self.last_final_text.take()
     }
 }
-
-
-
-
 
 #[cfg(test)]
 mod tests {

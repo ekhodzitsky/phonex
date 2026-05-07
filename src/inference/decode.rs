@@ -1,7 +1,7 @@
 use ndarray::{Array1, Array2, Array3, Axis};
 
-use crate::encoder::OfflineEncoder;
 use crate::decoder::SherpaDecoder;
+use crate::encoder::OfflineEncoder;
 use crate::joiner::SherpaJoiner;
 use crate::tokenizer::Tokenizer;
 

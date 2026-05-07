@@ -19,7 +19,10 @@ fn ort_err(msg: &str, e: impl std::fmt::Display) -> crate::SiamError {
     crate::SiamError::Inference(format!("{msg}: {e}"))
 }
 
-fn load_onnx_session_impl(path: &str, #[allow(unused_variables)] force_cpu: bool) -> crate::Result<Session> {
+fn load_onnx_session_impl(
+    path: &str,
+    #[allow(unused_variables)] force_cpu: bool,
+) -> crate::Result<Session> {
     let mut builder = Session::builder()
         .map_err(|e| ort_err("ORT session builder error", e))?
         .with_intra_threads(4)

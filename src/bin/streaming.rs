@@ -55,8 +55,12 @@ impl Language {
             Language::En20230621 => "models/sherpa-onnx-streaming-zipformer-en-2023-06-21",
             Language::En20230626 => "models/sherpa-onnx-streaming-zipformer-en-2023-06-26",
             Language::Fr20230414 => "models/sherpa-onnx-streaming-zipformer-fr-2023-04-14",
-            Language::DeKroko20250806 => "models/sherpa-onnx-streaming-zipformer-de-kroko-2025-08-06",
-            Language::EsKroko20250806 => "models/sherpa-onnx-streaming-zipformer-es-kroko-2025-08-06",
+            Language::DeKroko20250806 => {
+                "models/sherpa-onnx-streaming-zipformer-de-kroko-2025-08-06"
+            }
+            Language::EsKroko20250806 => {
+                "models/sherpa-onnx-streaming-zipformer-es-kroko-2025-08-06"
+            }
             Language::Ko20240616 => "models/sherpa-onnx-streaming-zipformer-korean-2024-06-16",
         }
     }
@@ -93,8 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let info = ModelInfo::from_model_dir(&model_dir)?;
-    let mut pipeline =
-        StreamingPipeline::from_model_dir(&model_dir, &info, vad_path.as_deref())?;
+    let mut pipeline = StreamingPipeline::from_model_dir(&model_dir, &info, vad_path.as_deref())?;
 
     eprintln!("Reading WAV: {}", args.wav);
     let (samples, sample_rate) = AudioPreprocessor::read_wav(&args.wav)?;

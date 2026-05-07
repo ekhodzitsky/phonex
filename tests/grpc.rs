@@ -5,17 +5,18 @@ mod grpc_tests {
     use std::net::SocketAddr;
     use std::sync::Arc;
     use tokio::net::TcpListener;
-    use tonic_health::pb::health_client::HealthClient;
     use tonic_health::pb::HealthCheckRequest;
+    use tonic_health::pb::health_client::HealthClient;
 
-    use phonex::inference::pool::SessionPool;
     use phonex::inference::Engine;
+    use phonex::inference::pool::SessionPool;
     use phonex::tokenizer::Tokenizer;
 
     fn test_engine() -> (Arc<Engine>, phonex::model_config::ModelInfo) {
-        let paths =
-            phonex::model_config::discover_model_files("models/sherpa-onnx-zipformer-thai-2024-06-20")
-                .unwrap();
+        let paths = phonex::model_config::discover_model_files(
+            "models/sherpa-onnx-zipformer-thai-2024-06-20",
+        )
+        .unwrap();
         let tokenizer = Arc::new(
             Tokenizer::from_file(
                 paths.tokenizer.to_str().unwrap_or(""),
@@ -41,10 +42,7 @@ mod grpc_tests {
             model_id: "sherpa-onnx-zipformer-th".into(),
             model_name: "sherpa-onnx-zipformer-thai-2024-06-20".into(),
         };
-        (
-            Arc::new(Engine::new(pool, tokenizer, info.clone())),
-            info,
-        )
+        (Arc::new(Engine::new(pool, tokenizer, info.clone())), info)
     }
 
     #[tokio::test]
@@ -91,6 +89,9 @@ mod grpc_tests {
             .await
             .expect("Health check failed");
 
-        assert_eq!(response.into_inner().status, tonic_health::pb::health_check_response::ServingStatus::Serving as i32);
+        assert_eq!(
+            response.into_inner().status,
+            tonic_health::pb::health_check_response::ServingStatus::Serving as i32
+        );
     }
 }

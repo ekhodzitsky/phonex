@@ -11,7 +11,7 @@
 //!
 //! Target: RTF < 0.1 (process 1 s of audio in < 100 ms).
 
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
+use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use ndarray::Array3;
 use phonex::streaming_encoder::StreamingEncoder;
 

@@ -2,8 +2,8 @@
 
 use std::ops::{Deref, DerefMut};
 
-use crate::encoder::OfflineEncoder;
 use crate::decoder::SherpaDecoder;
+use crate::encoder::OfflineEncoder;
 use crate::joiner::SherpaJoiner;
 use crate::model_config::ModelInfo;
 
@@ -41,11 +41,7 @@ pub struct SessionTriplet {
 }
 
 impl SessionTriplet {
-    pub fn new(
-        encoder: OfflineEncoder,
-        decoder: SherpaDecoder,
-        joiner: SherpaJoiner,
-    ) -> Self {
+    pub fn new(encoder: OfflineEncoder, decoder: SherpaDecoder, joiner: SherpaJoiner) -> Self {
         Self {
             encoder,
             decoder,
@@ -55,18 +51,9 @@ impl SessionTriplet {
 
     pub fn from_model_dir(model_dir: &str, info: &ModelInfo) -> crate::Result<Self> {
         let paths = crate::model_config::discover_model_files(model_dir)?;
-        let encoder = OfflineEncoder::new(
-            paths.encoder.to_str().unwrap_or(""),
-            info,
-        )?;
-        let decoder = SherpaDecoder::new(
-            paths.decoder.to_str().unwrap_or(""),
-            info,
-        )?;
-        let joiner = SherpaJoiner::new(
-            paths.joiner.to_str().unwrap_or(""),
-            info,
-        )?;
+        let encoder = OfflineEncoder::new(paths.encoder.to_str().unwrap_or(""), info)?;
+        let decoder = SherpaDecoder::new(paths.decoder.to_str().unwrap_or(""), info)?;
+        let joiner = SherpaJoiner::new(paths.joiner.to_str().unwrap_or(""), info)?;
         Ok(Self::new(encoder, decoder, joiner))
     }
 }
@@ -76,21 +63,33 @@ impl<T> Pool<T> {
         let total = items.len();
         let (sender, receiver) = async_channel::bounded(total.max(1));
         for item in items {
-            sender.try_send(item).expect("channel capacity matches item count");
+            sender
+                .try_send(item)
+                .expect("channel capacity matches item count");
         }
-        Self { sender, receiver, total }
+        Self {
+            sender,
+            receiver,
+            total,
+        }
     }
 
     pub async fn checkout(&self) -> Result<PoolGuard<'_, T>, PoolError> {
         match self.receiver.recv().await {
-            Ok(item) => Ok(PoolGuard { pool: self, item: Some(item) }),
+            Ok(item) => Ok(PoolGuard {
+                pool: self,
+                item: Some(item),
+            }),
             Err(_) => Err(PoolError::Closed),
         }
     }
 
     pub fn try_checkout(&self) -> Option<PoolGuard<'_, T>> {
         match self.receiver.try_recv() {
-            Ok(item) => Some(PoolGuard { pool: self, item: Some(item) }),
+            Ok(item) => Some(PoolGuard {
+                pool: self,
+                item: Some(item),
+            }),
             Err(_) => None,
         }
     }
@@ -117,31 +116,43 @@ pub struct PoolGuard<'a, T> {
 
 impl<T> PoolGuard<'_, T> {
     pub fn into_owned(mut self) -> CheckoutGuard<T> {
-        let item = self.item.take().expect("PoolGuard::into_owned called after drop");
-        let reservation = OwnedReservation { sender: self.pool.sender.clone() };
-        CheckoutGuard { item: Some(item), reservation: Some(reservation) }
+        let item = self
+            .item
+            .take()
+            .expect("PoolGuard::into_owned called after drop");
+        let reservation = OwnedReservation {
+            sender: self.pool.sender.clone(),
+        };
+        CheckoutGuard {
+            item: Some(item),
+            reservation: Some(reservation),
+        }
     }
 }
 
 impl<T> Deref for PoolGuard<'_, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        self.item.as_ref().expect("PoolGuard accessed after item taken")
+        self.item
+            .as_ref()
+            .expect("PoolGuard accessed after item taken")
     }
 }
 
 impl<T> DerefMut for PoolGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.item.as_mut().expect("PoolGuard accessed after item taken")
+        self.item
+            .as_mut()
+            .expect("PoolGuard accessed after item taken")
     }
 }
 
 impl<T> Drop for PoolGuard<'_, T> {
     fn drop(&mut self) {
-        if let Some(item) = self.item.take() {
-            if let Err(e) = self.pool.sender.try_send(item) {
-                tracing::warn!("PoolGuard drop failed to return item: {e}");
-            }
+        if let Some(item) = self.item.take()
+            && let Err(e) = self.pool.sender.try_send(item)
+        {
+            tracing::warn!("PoolGuard drop failed to return item: {e}");
         }
     }
 }
@@ -169,8 +180,14 @@ impl<T> CheckoutGuard<T> {
     /// Take the inner item out of the guard. The caller becomes responsible for calling
     /// [`OwnedReservation::checkin`] manually. Prefer letting the guard drop instead.
     pub fn into_inner(mut self) -> (T, OwnedReservation<T>) {
-        let item = self.item.take().expect("CheckoutGuard::into_inner called after drop");
-        let reservation = self.reservation.take().expect("CheckoutGuard::into_inner called twice");
+        let item = self
+            .item
+            .take()
+            .expect("CheckoutGuard::into_inner called after drop");
+        let reservation = self
+            .reservation
+            .take()
+            .expect("CheckoutGuard::into_inner called twice");
         (item, reservation)
     }
 }
@@ -178,13 +195,17 @@ impl<T> CheckoutGuard<T> {
 impl<T> Deref for CheckoutGuard<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        self.item.as_ref().expect("CheckoutGuard accessed after into_inner")
+        self.item
+            .as_ref()
+            .expect("CheckoutGuard accessed after into_inner")
     }
 }
 
 impl<T> DerefMut for CheckoutGuard<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.item.as_mut().expect("CheckoutGuard accessed after into_inner")
+        self.item
+            .as_mut()
+            .expect("CheckoutGuard accessed after into_inner")
     }
 }
 

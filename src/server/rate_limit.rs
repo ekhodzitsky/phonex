@@ -94,7 +94,8 @@ impl RateLimiter {
 
     pub fn evict_stale(&self, older_than: Duration) {
         let cutoff = unix_ms().saturating_sub(older_than.as_millis() as u64);
-        self.buckets.retain(|_, bucket| bucket.last_seen_ms >= cutoff);
+        self.buckets
+            .retain(|_, bucket| bucket.last_seen_ms >= cutoff);
     }
 
     #[cfg(test)]
@@ -139,7 +140,8 @@ pub async fn rate_limit_middleware(
     req: Request,
     next: Next,
 ) -> Response {
-    let ip = extract_client_ip(&req, limiter.trust_proxy).unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+    let ip =
+        extract_client_ip(&req, limiter.trust_proxy).unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
     if limiter.check(ip) {
         next.run(req).await
     } else {

@@ -6,8 +6,8 @@ use std::sync::Arc;
 use clap::{Parser, ValueEnum};
 use tracing_subscriber::EnvFilter;
 
-use phonex::inference::pool::{SessionPool, SessionTriplet};
 use phonex::inference::Engine;
+use phonex::inference::pool::{SessionPool, SessionTriplet};
 use phonex::model_config::ModelInfo;
 use phonex::server;
 use phonex::server::RuntimeLimits;
@@ -108,7 +108,9 @@ impl Language {
             Language::German => "models/sherpa-onnx-streaming-zipformer-de-kroko-2025-08-06",
             Language::Spanish => "models/sherpa-onnx-streaming-zipformer-es-kroko-2025-08-06",
             Language::Bengali => "models/sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09",
-            Language::ChineseStreaming => "models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30",
+            Language::ChineseStreaming => {
+                "models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30"
+            }
             Language::KoreanStreaming => "models/sherpa-onnx-streaming-zipformer-korean-2024-06-16",
             Language::EnglishStreaming => "models/sherpa-onnx-streaming-zipformer-en-2023-06-26",
         }
@@ -183,7 +185,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let shutdown = tokio_util::sync::CancellationToken::new();
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    let app = server::app_with_limits(engine.clone(), model_dir.clone(), info.clone(), limits.clone(), shutdown.clone());
+    let app = server::app_with_limits(
+        engine.clone(),
+        model_dir.clone(),
+        info.clone(),
+        limits.clone(),
+        shutdown.clone(),
+    );
 
     let shutdown_http = shutdown.clone();
     let http_handle = tokio::spawn(async move {
@@ -231,10 +239,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     #[cfg(feature = "grpc")]
-    if let Some(h) = grpc_handle {
-        if let Err(e) = h.await {
-            tracing::error!("gRPC server task failed: {e}");
-        }
+    if let Some(h) = grpc_handle
+        && let Err(e) = h.await
+    {
+        tracing::error!("gRPC server task failed: {e}");
     }
 
     tracing::info!("Server shut down gracefully");

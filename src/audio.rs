@@ -59,7 +59,7 @@ impl AudioPreprocessor {
             return Ok(samples.to_vec());
         }
         let ratio = from_rate as f32 / self.target_sample_rate as f32;
-        if ratio > 16.0 || ratio < 1.0 / 16.0 {
+        if !(1.0 / 16.0..=16.0).contains(&ratio) {
             return Err(crate::SiamError::Inference(format!(
                 "Resample ratio {ratio} out of safe bounds (1/16 .. 16)"
             )));
@@ -83,7 +83,7 @@ impl AudioPreprocessor {
         let stft = self.stft(&preemphasized);
         let power = stft.mapv(|x| x * x); // magnitude squared
         let mel = self.mel_filterbank.dot(&power);
-        
+
         mel.mapv(|x| (x + self.log_zero_guard).ln())
     }
 
@@ -152,10 +152,9 @@ impl AudioPreprocessor {
         let spec = reader.spec();
         let sample_rate = spec.sample_rate as usize;
         let samples: Vec<f32> = match spec.sample_format {
-            hound::SampleFormat::Float => reader
-                .samples::<f32>()
-                .map(|s| s.unwrap_or(0.0))
-                .collect(),
+            hound::SampleFormat::Float => {
+                reader.samples::<f32>().map(|s| s.unwrap_or(0.0)).collect()
+            }
             hound::SampleFormat::Int => {
                 let max_val = (1i64 << (spec.bits_per_sample - 1)) as f32;
                 reader

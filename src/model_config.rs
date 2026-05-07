@@ -25,7 +25,10 @@ pub struct ModelPaths {
 pub fn discover_model_files(model_dir: &str) -> crate::Result<ModelPaths> {
     let dir = Path::new(model_dir);
     if !dir.is_dir() {
-        return Err(crate::SiamError::Inference(format!("Not a directory: {}", model_dir)));
+        return Err(crate::SiamError::Inference(format!(
+            "Not a directory: {}",
+            model_dir
+        )));
     }
 
     let mut encoder = None;
@@ -58,9 +61,12 @@ pub fn discover_model_files(model_dir: &str) -> crate::Result<ModelPaths> {
     }
 
     let require = |name: &str, p: Option<PathBuf>| -> crate::Result<PathBuf> {
-        p.ok_or_else(|| crate::SiamError::Inference(
-            format!("Model directory '{}' missing {} file", model_dir, name)
-        ))
+        p.ok_or_else(|| {
+            crate::SiamError::Inference(format!(
+                "Model directory '{}' missing {} file",
+                model_dir, name
+            ))
+        })
     };
 
     Ok(ModelPaths {
@@ -77,7 +83,12 @@ pub fn discover_model_files(model_dir: &str) -> crate::Result<ModelPaths> {
 fn pick_priority(current: Option<PathBuf>, candidate: PathBuf, lower: &str) -> Option<PathBuf> {
     match current {
         None => Some(candidate),
-        Some(ref existing) if lower.contains("int8") && !existing.to_string_lossy().to_lowercase().contains("int8") => Some(candidate),
+        Some(ref existing)
+            if lower.contains("int8")
+                && !existing.to_string_lossy().to_lowercase().contains("int8") =>
+        {
+            Some(candidate)
+        }
         Some(existing) => Some(existing),
     }
 }
@@ -86,7 +97,9 @@ fn pick_priority(current: Option<PathBuf>, candidate: PathBuf, lower: &str) -> O
 fn pick_tokenizer(current: Option<PathBuf>, candidate: PathBuf, lower: &str) -> Option<PathBuf> {
     match current {
         None => Some(candidate),
-        Some(ref existing) if lower.contains("bpe") || lower.contains("tokenizer") => Some(candidate),
+        Some(ref existing) if lower.contains("bpe") || lower.contains("tokenizer") => {
+            Some(candidate)
+        }
         Some(existing) => Some(existing),
     }
 }
@@ -136,9 +149,15 @@ impl Default for ModelConfig {
     }
 }
 
-fn default_sample_rate() -> u32 { 16000 }
-fn default_n_mels() -> usize { 80 }
-fn default_blank_id() -> u32 { 0 }
+fn default_sample_rate() -> u32 {
+    16000
+}
+fn default_n_mels() -> usize {
+    80
+}
+fn default_blank_id() -> u32 {
+    0
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TensorConfig {
@@ -169,7 +188,9 @@ impl ModelInfo {
     /// Returns `true` if the model is a streaming (online) model.
     /// Streaming models have `cached_*` inputs in the encoder ONNX graph.
     pub fn is_streaming(&self) -> bool {
-        self.encoder_inputs.iter().any(|name| name.starts_with("cached_"))
+        self.encoder_inputs
+            .iter()
+            .any(|name| name.starts_with("cached_"))
     }
 }
 
@@ -192,8 +213,7 @@ impl ModelInfo {
     pub fn from_model_dir(model_dir: &str) -> crate::Result<Self> {
         let config_path = Path::new(model_dir).join("model.json");
         let config: ModelConfig = if config_path.exists() {
-            let text = std::fs::read_to_string(&config_path)
-                .map_err(crate::SiamError::Io)?;
+            let text = std::fs::read_to_string(&config_path).map_err(crate::SiamError::Io)?;
             serde_json::from_str(&text)
                 .map_err(|e| crate::SiamError::Inference(format!("Invalid model.json: {e}")))?
         } else {
@@ -216,60 +236,96 @@ impl ModelInfo {
         let n_mels = config.n_mels;
         let d_model = config.d_model.unwrap_or_else(|| {
             // Try to infer from encoder output shape [batch, time, d_model]
-            encoder.outputs().iter().find_map(|o| {
-                if let ort::value::ValueType::Tensor { shape, .. } = o.dtype()
-                    && shape.len() == 3 {
+            encoder
+                .outputs()
+                .iter()
+                .find_map(|o| {
+                    if let ort::value::ValueType::Tensor { shape, .. } = o.dtype()
+                        && shape.len() == 3
+                    {
                         let dim = shape[2];
                         return Some(if dim <= 0 { 512usize } else { dim as usize });
                     }
-                None
-            }).unwrap_or_else(|| {
-                tracing::info!("Falling back to default d_model=512");
-                512
-            })
+                    None
+                })
+                .unwrap_or_else(|| {
+                    tracing::info!("Falling back to default d_model=512");
+                    512
+                })
         });
 
         let context_size = config.context_size.unwrap_or_else(|| {
-            decoder.inputs().iter().find_map(|i| {
-                if let ort::value::ValueType::Tensor { shape, .. } = i.dtype()
-                    && shape.len() == 2 {
+            decoder
+                .inputs()
+                .iter()
+                .find_map(|i| {
+                    if let ort::value::ValueType::Tensor { shape, .. } = i.dtype()
+                        && shape.len() == 2
+                    {
                         let dim = shape[1];
                         return Some(if dim <= 0 { 2usize } else { dim as usize });
                     }
-                None
-            }).unwrap_or_else(|| {
-                tracing::info!("Falling back to default context_size=2");
-                2
-            })
+                    None
+                })
+                .unwrap_or_else(|| {
+                    tracing::info!("Falling back to default context_size=2");
+                    2
+                })
         });
 
         let vocab_size = config.vocab_size.unwrap_or_else(|| {
-            joiner.outputs().iter().find_map(|o| {
-                if let ort::value::ValueType::Tensor { shape, .. } = o.dtype()
-                    && shape.len() == 2 {
+            joiner
+                .outputs()
+                .iter()
+                .find_map(|o| {
+                    if let ort::value::ValueType::Tensor { shape, .. } = o.dtype()
+                        && shape.len() == 2
+                    {
                         let dim = shape[1];
                         return Some(if dim <= 0 { 2000usize } else { dim as usize });
                     }
-                None
-            }).unwrap_or_else(|| {
-                tracing::info!("Falling back to default vocab_size=2000");
-                2000
-            })
+                    None
+                })
+                .unwrap_or_else(|| {
+                    tracing::info!("Falling back to default vocab_size=2000");
+                    2000
+                })
         });
 
-        let encoder_inputs = io_names(config.encoder.as_ref().map(|c| c.input_names.clone()), encoder.inputs());
-        let encoder_outputs = io_names(config.encoder.as_ref().map(|c| c.output_names.clone()), encoder.outputs());
-        let decoder_inputs = io_names(config.decoder.as_ref().map(|c| c.input_names.clone()), decoder.inputs());
-        let decoder_outputs = io_names(config.decoder.as_ref().map(|c| c.output_names.clone()), decoder.outputs());
-        let joiner_inputs = io_names(config.joiner.as_ref().map(|c| c.input_names.clone()), joiner.inputs());
-        let joiner_outputs = io_names(config.joiner.as_ref().map(|c| c.output_names.clone()), joiner.outputs());
+        let encoder_inputs = io_names(
+            config.encoder.as_ref().map(|c| c.input_names.clone()),
+            encoder.inputs(),
+        );
+        let encoder_outputs = io_names(
+            config.encoder.as_ref().map(|c| c.output_names.clone()),
+            encoder.outputs(),
+        );
+        let decoder_inputs = io_names(
+            config.decoder.as_ref().map(|c| c.input_names.clone()),
+            decoder.inputs(),
+        );
+        let decoder_outputs = io_names(
+            config.decoder.as_ref().map(|c| c.output_names.clone()),
+            decoder.outputs(),
+        );
+        let joiner_inputs = io_names(
+            config.joiner.as_ref().map(|c| c.input_names.clone()),
+            joiner.inputs(),
+        );
+        let joiner_outputs = io_names(
+            config.joiner.as_ref().map(|c| c.output_names.clone()),
+            joiner.outputs(),
+        );
 
         // Derive model_id from config or directory basename.
         let dir_basename = Path::new(model_dir)
             .file_name()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_else(|| "unknown".into());
-        let model_id = config.model_id.clone().unwrap_or_else(|| dir_basename.clone());
+        let model_id = config
+            .model_id
+            .clone()
+            .unwrap_or_else(|| dir_basename.clone());
         let model_name = config.model_name.clone().unwrap_or(dir_basename);
 
         // If there was no model.json, write one with auto-detected values so the

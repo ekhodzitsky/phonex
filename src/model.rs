@@ -151,14 +151,14 @@ pub fn ensure_model(model_dir: &str) -> crate::Result<()> {
         .and_then(|s| s.to_str())
         .unwrap_or(model_dir);
 
-    let spec = find_model_spec(basename)
-        .ok_or_else(|| crate::SiamError::Inference(
-            format!("Unknown model '{}'. Please download it manually or use a supported --language.", model_dir)
-        ))?;
+    let spec = find_model_spec(basename).ok_or_else(|| {
+        crate::SiamError::Inference(format!(
+            "Unknown model '{}'. Please download it manually or use a supported --language.",
+            model_dir
+        ))
+    })?;
 
-    let models_base = Path::new(model_dir)
-        .parent()
-        .unwrap_or(Path::new("models"));
+    let models_base = Path::new(model_dir).parent().unwrap_or(Path::new("models"));
     std::fs::create_dir_all(models_base)?;
 
     let archive_path = models_base.join(spec.archive_name);
@@ -169,8 +169,9 @@ pub fn ensure_model(model_dir: &str) -> crate::Result<()> {
     }
 
     if let Some(expected) = spec.sha256 {
-        let actual = sha256_file(&archive_path)
-            .map_err(|e| crate::SiamError::Inference(format!("Checksum computation failed: {e}")))?;
+        let actual = sha256_file(&archive_path).map_err(|e| {
+            crate::SiamError::Inference(format!("Checksum computation failed: {e}"))
+        })?;
         if actual != expected {
             return Err(crate::SiamError::Inference(format!(
                 "Checksum mismatch for {}: expected {expected}, got {actual}",
@@ -201,9 +202,10 @@ pub fn ensure_model(model_dir: &str) -> crate::Result<()> {
     }
 
     if !model_exists(model_dir) {
-        return Err(crate::SiamError::Inference(
-            format!("Model extraction failed: missing files in {}", model_dir)
-        ));
+        return Err(crate::SiamError::Inference(format!(
+            "Model extraction failed: missing files in {}",
+            model_dir
+        )));
     }
 
     tracing::info!(model_dir, "Model ready");
@@ -217,7 +219,8 @@ fn download_with_progress(url: &str, dest: &Path) -> crate::Result<()> {
 }
 
 async fn async_download(url: &str, dest: &Path) -> crate::Result<()> {
-    let response = reqwest::get(url).await
+    let response = reqwest::get(url)
+        .await
         .map_err(|e| crate::SiamError::Inference(format!("Download failed: {e}")))?;
 
     let total_size = response.content_length().unwrap_or(0);
@@ -234,7 +237,8 @@ async fn async_download(url: &str, dest: &Path) -> crate::Result<()> {
     let mut stream = response.bytes_stream();
 
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| crate::SiamError::Inference(format!("Download stream error: {e}")))?;
+        let chunk = chunk
+            .map_err(|e| crate::SiamError::Inference(format!("Download stream error: {e}")))?;
         file.write_all(&chunk)?;
         pb.inc(chunk.len() as u64);
     }
@@ -250,9 +254,11 @@ fn extract_tar_bz2(archive: &Path, dest: &Path) -> crate::Result<()> {
     let mut archive = tar::Archive::new(decompressor);
 
     for entry in archive.entries()? {
-        let mut entry = entry.map_err(|e| crate::SiamError::Inference(format!("Extraction failed: {e}")))?;
+        let mut entry =
+            entry.map_err(|e| crate::SiamError::Inference(format!("Extraction failed: {e}")))?;
         // unpack_in validates that the entry path stays within dest
-        entry.unpack_in(dest)
+        entry
+            .unpack_in(dest)
             .map_err(|e| crate::SiamError::Inference(format!("Extraction failed: {e}")))?;
     }
     Ok(())
@@ -311,8 +317,7 @@ mod tests {
         header[148..156].copy_from_slice(cksum.as_bytes());
 
         let file = std::fs::File::create(path).unwrap();
-        let mut encoder =
-            bzip2::write::BzEncoder::new(file, bzip2::Compression::default());
+        let mut encoder = bzip2::write::BzEncoder::new(file, bzip2::Compression::default());
         encoder.write_all(&header).unwrap();
         // Two zero-blocks mark end-of-archive
         encoder.write_all(&[0u8; 1024]).unwrap();
@@ -349,8 +354,7 @@ mod tests {
         drop(file);
 
         let result = sha256_file(&file_path).unwrap();
-        let expected =
-            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
+        let expected = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
         assert_eq!(result, expected);
     }
 }

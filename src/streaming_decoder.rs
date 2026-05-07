@@ -3,8 +3,8 @@
 use ndarray::{Array2, Array3};
 
 use crate::decoder::SherpaDecoder;
-use crate::joiner::SherpaJoiner;
 use crate::inference::decode::argmax_logit_with_confidence;
+use crate::joiner::SherpaJoiner;
 use crate::tokenizer::Tokenizer;
 
 /// A single decoded token with timing and confidence.
@@ -120,5 +120,3 @@ impl<'a> StreamingGreedyDecoder<'a> {
         self.tokenizer.decode_ids(&ids)
     }
 }
-
-

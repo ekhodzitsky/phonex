@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Top-level configuration.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct PhonexConfig {
     #[serde(default)]
     pub model: ModelConfig,
@@ -19,17 +19,6 @@ pub struct PhonexConfig {
     pub tls: Option<TlsConfig>,
     #[serde(default)]
     pub logging: LoggingConfig,
-}
-
-impl Default for PhonexConfig {
-    fn default() -> Self {
-        Self {
-            model: ModelConfig::default(),
-            server: ServerConfig::default(),
-            tls: None,
-            logging: LoggingConfig::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -99,19 +88,10 @@ impl Default for LimitsConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AuthConfig {
     pub api_key: Option<String>,
     pub admin_api_key: Option<String>,
-}
-
-impl Default for AuthConfig {
-    fn default() -> Self {
-        Self {
-            api_key: None,
-            admin_api_key: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

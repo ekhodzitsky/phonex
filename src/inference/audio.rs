@@ -19,7 +19,10 @@ pub fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32
         return Ok(samples.to_vec());
     }
 
-    let samples: Vec<f32> = samples.iter().map(|&s| if s.is_finite() { s } else { 0.0 }).collect();
+    let samples: Vec<f32> = samples
+        .iter()
+        .map(|&s| if s.is_finite() { s } else { 0.0 })
+        .collect();
 
     let ratio = f64::from(to_rate) / f64::from(from_rate);
     let channels = 1;
@@ -38,8 +41,9 @@ pub fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32
         window,
     };
 
-    let mut resampler = Async::<f32>::new_sinc(ratio, 1.1, &params, chunk_size, channels, FixedAsync::Input)
-        .map_err(|e| SiamError::Audio(format!("Resampler init failed: {e}")))?;
+    let mut resampler =
+        Async::<f32>::new_sinc(ratio, 1.1, &params, chunk_size, channels, FixedAsync::Input)
+            .map_err(|e| SiamError::Audio(format!("Resampler init failed: {e}")))?;
 
     let output_capacity = (samples.len() as f64 * ratio) as usize + samples.len();
     let mut outdata = vec![0.0f32; output_capacity * channels];
@@ -77,7 +81,11 @@ pub fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32
 
     let delay = resampler.output_delay();
     let expected_out = (samples.len() as f64 * ratio) as usize;
-    Ok(outdata.into_iter().skip(delay * channels).take(expected_out * channels).collect())
+    Ok(outdata
+        .into_iter()
+        .skip(delay * channels)
+        .take(expected_out * channels)
+        .collect())
 }
 
 /// Convert a little-endian byte slice to a Vec<f32>.
@@ -91,14 +99,17 @@ pub fn bytes_to_f32_samples(data: &[u8]) -> Vec<f32> {
 /// Returns `(samples, sample_rate)`.
 pub fn decode_audio(data: &[u8]) -> Result<(Vec<f32>, u32), SiamError> {
     use symphonia::core::audio::SampleBuffer;
-    use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
+    use symphonia::core::codecs::{CODEC_TYPE_NULL, DecoderOptions};
     use symphonia::core::errors::Error as SymphoniaError;
     use symphonia::core::formats::FormatOptions;
     use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
     use symphonia::core::meta::MetadataOptions;
     use symphonia::core::probe::Hint;
 
-    let mss = MediaSourceStream::new(Box::new(std::io::Cursor::new(data.to_vec())), MediaSourceStreamOptions::default());
+    let mss = MediaSourceStream::new(
+        Box::new(std::io::Cursor::new(data.to_vec())),
+        MediaSourceStreamOptions::default(),
+    );
     let hint = Hint::new();
     let format_opts = FormatOptions::default();
     let metadata_opts = MetadataOptions::default();
@@ -131,7 +142,11 @@ pub fn decode_audio(data: &[u8]) -> Result<(Vec<f32>, u32), SiamError> {
     loop {
         let packet = match format.next_packet() {
             Ok(pkt) => pkt,
-            Err(SymphoniaError::IoError(ref e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(SymphoniaError::IoError(ref e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break;
+            }
             Err(SymphoniaError::ResetRequired) => continue,
             Err(e) => return Err(SiamError::Audio(format!("Read error: {e}"))),
         };
@@ -153,14 +168,20 @@ pub fn decode_audio(data: &[u8]) -> Result<(Vec<f32>, u32), SiamError> {
                     if channels > 1 {
                         // Convert interleaved stereo to mono
                         all_samples.extend(
-                            samples.chunks(channels).map(|chunk| chunk.iter().sum::<f32>() / channels as f32)
+                            samples
+                                .chunks(channels)
+                                .map(|chunk| chunk.iter().sum::<f32>() / channels as f32),
                         );
                     } else {
                         all_samples.extend_from_slice(samples);
                     }
                 }
             }
-            Err(SymphoniaError::IoError(ref e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(SymphoniaError::IoError(ref e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break;
+            }
             Err(SymphoniaError::DecodeError(_)) | Err(SymphoniaError::ResetRequired) => continue,
             Err(e) => return Err(SiamError::Audio(format!("Decode error: {e}"))),
         }

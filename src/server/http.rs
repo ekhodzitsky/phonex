@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use super::metrics::MetricsRegistry;
-use super::{RuntimeLimits, POOL_RETRY_AFTER_MS, POOL_RETRY_AFTER_SECS};
+use super::{POOL_RETRY_AFTER_MS, POOL_RETRY_AFTER_SECS, RuntimeLimits};
 use crate::inference::Engine;
 
 /// Shared application state for all handlers.
@@ -84,7 +84,11 @@ pub struct TranscribeResponse {
 type ApiError = Response;
 
 fn api_error(status: StatusCode, msg: &str, code: &str) -> ApiError {
-    (status, Json(serde_json::json!({"error": msg, "code": code}))).into_response()
+    (
+        status,
+        Json(serde_json::json!({"error": msg, "code": code})),
+    )
+        .into_response()
 }
 
 fn api_timeout_error() -> ApiError {
@@ -113,10 +117,7 @@ fn api_pool_closed_error() -> ApiError {
 
 async fn checkout_triplet(
     engine: &Arc<Engine>,
-) -> Result<
-    crate::inference::pool::CheckoutGuard<crate::inference::SessionTriplet>,
-    ApiError,
-> {
+) -> Result<crate::inference::pool::CheckoutGuard<crate::inference::SessionTriplet>, ApiError> {
     match tokio::time::timeout(std::time::Duration::from_secs(30), engine.pool.checkout()).await {
         Ok(Ok(guard)) => Ok(guard.into_owned()),
         Ok(Err(_pool_closed)) => Err(api_pool_closed_error()),
@@ -140,7 +141,11 @@ impl Drop for MetricsGuard<'_> {
                 ("path".to_string(), self.path.to_string()),
             ];
             r.counter_inc("requests_total", labels.clone(), 1);
-            r.histogram_record("request_duration_seconds", labels, self.start.elapsed().as_secs_f64());
+            r.histogram_record(
+                "request_duration_seconds",
+                labels,
+                self.start.elapsed().as_secs_f64(),
+            );
         }
     }
 }
@@ -202,9 +207,7 @@ pub async fn models(State(state): State<Arc<AppState>>) -> Json<ModelInfoRespons
         sample_rate: crate::inference::TARGET_SAMPLE_RATE,
         pool_size: engine.pool.total(),
         pool_available: engine.pool.available(),
-        supported_formats: vec![
-            "raw-f32le".into(),
-        ],
+        supported_formats: vec!["raw-f32le".into()],
         supported_rates: super::SUPPORTED_RATES.to_vec(),
     })
 }
@@ -243,19 +246,22 @@ async fn extract_audio_from_multipart(
             }
             Some("sample_rate") => {
                 if let Ok(text) = field.text().await
-                    && let Ok(rate) = text.trim().parse::<u32>() {
-                        sample_rate = Some(rate);
-                    }
+                    && let Ok(rate) = text.trim().parse::<u32>()
+                {
+                    sample_rate = Some(rate);
+                }
             }
             _ => {}
         }
     }
 
-    let body = audio_bytes.ok_or_else(|| api_error(
-        StatusCode::BAD_REQUEST,
-        "Missing 'audio' field in multipart upload",
-        "missing_audio",
-    ))?;
+    let body = audio_bytes.ok_or_else(|| {
+        api_error(
+            StatusCode::BAD_REQUEST,
+            "Missing 'audio' field in multipart upload",
+            "missing_audio",
+        )
+    })?;
 
     if body.is_empty() {
         return Err(api_error(
@@ -301,7 +307,8 @@ pub async fn transcribe(
         path: "/v1/transcribe",
         start: std::time::Instant::now(),
     };
-    let (body, client_rate) = extract_audio_from_multipart(&mut multipart, &query, state.limits.body_limit_bytes).await?;
+    let (body, client_rate) =
+        extract_audio_from_multipart(&mut multipart, &query, state.limits.body_limit_bytes).await?;
     let use_vad = query.vad;
     let use_diarization = query.diarize;
     let engine = state.engine.read().await.clone();
@@ -316,41 +323,45 @@ pub async fn transcribe(
             let samples = if client_rate == crate::inference::TARGET_SAMPLE_RATE {
                 samples_f32
             } else {
-                crate::inference::audio::resample(&samples_f32, client_rate, crate::inference::TARGET_SAMPLE_RATE)?
+                crate::inference::audio::resample(
+                    &samples_f32,
+                    client_rate,
+                    crate::inference::TARGET_SAMPLE_RATE,
+                )?
             };
             if use_diarization {
                 #[cfg(feature = "diarization")]
                 {
-                    engine.transcribe_samples_with_diarization(&samples, &mut *guard)
+                    engine.transcribe_samples_with_diarization(&samples, &mut guard)
                 }
                 #[cfg(not(feature = "diarization"))]
                 {
-                    engine.transcribe_samples(&samples, &mut *guard)
+                    engine.transcribe_samples(&samples, &mut guard)
                 }
             } else if use_vad {
-                engine.transcribe_samples_with_vad(&samples, &mut *guard)
+                engine.transcribe_samples_with_vad(&samples, &mut guard)
             } else {
-                engine.transcribe_samples(&samples, &mut *guard)
+                engine.transcribe_samples(&samples, &mut guard)
             }
         }));
         match r {
             Ok(inference_result) => inference_result,
             Err(_) => {
                 tracing::error!("Panic in REST transcribe — triplet recovered");
-                Err(crate::SiamError::Inference("Inference thread panicked".into()))
+                Err(crate::SiamError::Inference(
+                    "Inference thread panicked".into(),
+                ))
             }
         }
     })
     .await;
 
     match result {
-        Ok(Ok(result)) => {
-            Ok(Json(TranscribeResponse {
-                text: result.text,
-                words: result.words,
-                duration: result.duration_s,
-            }))
-        }
+        Ok(Ok(result)) => Ok(Json(TranscribeResponse {
+            text: result.text,
+            words: result.words,
+            duration: result.duration_s,
+        })),
         Ok(Err(e)) => {
             tracing::error!("Transcription error: {e}");
             Err(api_error(
@@ -384,13 +395,16 @@ pub async fn transcribe_batch(
         start: std::time::Instant::now(),
     };
     let mut files: Vec<(Bytes, u32)> = Vec::new();
-    let default_rate = query.sample_rate.unwrap_or(crate::inference::TARGET_SAMPLE_RATE);
+    let default_rate = query
+        .sample_rate
+        .unwrap_or(crate::inference::TARGET_SAMPLE_RATE);
 
     while let Ok(Some(field)) = multipart.next_field().await {
         if field.name() == Some("audio")
-            && let Ok(data) = field.bytes().await {
-                files.push((data, default_rate));
-            }
+            && let Ok(data) = field.bytes().await
+        {
+            files.push((data, default_rate));
+        }
     }
 
     if files.is_empty() {
@@ -414,23 +428,28 @@ pub async fn transcribe_batch(
                 let samples = if *client_rate == crate::inference::TARGET_SAMPLE_RATE {
                     samples_f32
                 } else {
-                    crate::inference::audio::resample(&samples_f32, *client_rate, crate::inference::TARGET_SAMPLE_RATE)?
+                    crate::inference::audio::resample(
+                        &samples_f32,
+                        *client_rate,
+                        crate::inference::TARGET_SAMPLE_RATE,
+                    )?
                 };
                 sample_buffers.push(samples);
             }
 
             let refs: Vec<&[f32]> = sample_buffers.iter().map(|s| s.as_slice()).collect();
-            engine.transcribe_batch(refs, &mut *guard)
+            engine.transcribe_batch(refs, &mut guard)
         }));
 
         match r {
-            Ok(Ok(batch_results)) => {
-                batch_results.into_iter().map(|result| TranscribeResponse {
+            Ok(Ok(batch_results)) => batch_results
+                .into_iter()
+                .map(|result| TranscribeResponse {
                     text: result.text,
                     words: result.words,
                     duration: result.duration_s,
-                }).collect::<Vec<_>>()
-            }
+                })
+                .collect::<Vec<_>>(),
             Ok(Err(e)) => {
                 tracing::error!("Batch transcription error: {e}");
                 vec![TranscribeResponse {
@@ -452,7 +471,11 @@ pub async fn transcribe_batch(
     .await
     .map_err(|e| {
         tracing::error!("spawn_blocking join error: {e}");
-        api_error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error", "internal")
+        api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error",
+            "internal",
+        )
     })?;
 
     Ok(Json(results))
@@ -471,11 +494,13 @@ pub async fn transcribe_stream(
         path: "/v1/transcribe/stream",
         start: std::time::Instant::now(),
     };
-    let (body, client_rate) = extract_audio_from_multipart(&mut multipart, &query, state.limits.body_limit_bytes).await?;
+    let (body, client_rate) =
+        extract_audio_from_multipart(&mut multipart, &query, state.limits.body_limit_bytes).await?;
     let engine = state.engine.read().await.clone();
     let guard = checkout_triplet(&engine).await?;
 
-    let (tx, rx) = tokio::sync::mpsc::channel::<Result<crate::inference::TranscriptSegment, String>>(256);
+    let (tx, rx) =
+        tokio::sync::mpsc::channel::<Result<crate::inference::TranscriptSegment, String>>(256);
 
     let engine = engine.clone();
     let cancel = state.shutdown.clone();
@@ -487,7 +512,11 @@ pub async fn transcribe_stream(
             let samples = if client_rate == crate::inference::TARGET_SAMPLE_RATE {
                 samples_f32
             } else {
-                match crate::inference::audio::resample(&samples_f32, client_rate, crate::inference::TARGET_SAMPLE_RATE) {
+                match crate::inference::audio::resample(
+                    &samples_f32,
+                    client_rate,
+                    crate::inference::TARGET_SAMPLE_RATE,
+                ) {
                     Ok(s) => s,
                     Err(e) => {
                         let _ = tx.try_send(Err(format!("{e}")));
@@ -509,7 +538,7 @@ pub async fn transcribe_stream(
                 if cancel.is_cancelled() {
                     return;
                 }
-                match engine.process_chunk(chunk, &mut stream_state, &mut *guard) {
+                match engine.process_chunk(chunk, &mut stream_state, &mut guard) {
                     Ok(segs) => {
                         for seg in segs {
                             if tx.try_send(Ok(seg)).is_err() {
@@ -525,9 +554,10 @@ pub async fn transcribe_stream(
             }
 
             if !cancel.is_cancelled()
-                && let Some(seg) = engine.flush_state(&mut stream_state, &mut *guard) {
-                    let _ = tx.try_send(Ok(seg));
-                }
+                && let Some(seg) = engine.flush_state(&mut stream_state, &mut guard)
+            {
+                let _ = tx.try_send(Ok(seg));
+            }
         }));
 
         if result.is_err() {
@@ -557,8 +587,6 @@ pub async fn transcribe_stream(
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
 
-
-
 /// POST /v1/admin/reload — hot-swap the loaded model without restarting the server.
 #[derive(Debug, Deserialize)]
 pub struct ReloadQuery {
@@ -566,6 +594,7 @@ pub struct ReloadQuery {
     pub model_dir: Option<String>,
 }
 
+#[allow(clippy::result_large_err)]
 fn validate_model_dir(dir: &str) -> Result<std::path::PathBuf, ApiError> {
     let path = std::path::Path::new(dir);
 
@@ -610,29 +639,61 @@ pub async fn reload(
 
     tracing::info!(model_dir = %new_model_dir, "Hot-swapping model");
 
-    let info = crate::model_config::ModelInfo::from_model_dir(&new_model_dir)
-        .map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("Failed to load model: {e}"), "model_load_error"))?;
-    let paths = crate::model_config::discover_model_files(&new_model_dir)
-        .map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("Failed to discover model files: {e}"), "model_discovery_error"))?;
+    let info = crate::model_config::ModelInfo::from_model_dir(&new_model_dir).map_err(|e| {
+        api_error(
+            StatusCode::BAD_REQUEST,
+            &format!("Failed to load model: {e}"),
+            "model_load_error",
+        )
+    })?;
+    let paths = crate::model_config::discover_model_files(&new_model_dir).map_err(|e| {
+        api_error(
+            StatusCode::BAD_REQUEST,
+            &format!("Failed to discover model files: {e}"),
+            "model_discovery_error",
+        )
+    })?;
 
-    let tokenizer = Arc::new(crate::tokenizer::Tokenizer::from_file(
-        paths.tokenizer.to_str().unwrap_or(""),
-        paths.tokens.to_str().unwrap_or(""),
-        info.blank_id,
-    ).map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("Failed to load tokenizer: {e}"), "tokenizer_error"))?);
+    let tokenizer = Arc::new(
+        crate::tokenizer::Tokenizer::from_file(
+            paths.tokenizer.to_str().unwrap_or(""),
+            paths.tokens.to_str().unwrap_or(""),
+            info.blank_id,
+        )
+        .map_err(|e| {
+            api_error(
+                StatusCode::BAD_REQUEST,
+                &format!("Failed to load tokenizer: {e}"),
+                "tokenizer_error",
+            )
+        })?,
+    );
 
     let pool_size = state.engine.read().await.pool.total().max(1);
     let mut triplets = Vec::with_capacity(pool_size);
     for i in 0..pool_size {
         tracing::debug!(slot = i, "Loading ONNX sessions for hot-swap");
-        triplets.push(crate::inference::SessionTriplet::from_model_dir(&new_model_dir, &info)
-            .map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("Failed to create session: {e}"), "session_error"))?);
+        triplets.push(
+            crate::inference::SessionTriplet::from_model_dir(&new_model_dir, &info).map_err(
+                |e| {
+                    api_error(
+                        StatusCode::BAD_REQUEST,
+                        &format!("Failed to create session: {e}"),
+                        "session_error",
+                    )
+                },
+            )?,
+        );
     }
 
     let pool = crate::inference::pool::SessionPool::new(triplets);
     let new_engine = Arc::new(
         crate::inference::Engine::new(pool, tokenizer, info.clone()).with_vad(
-            paths.vad.map(|p| p.to_string_lossy().to_string()).unwrap_or_default().as_str(),
+            paths
+                .vad
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default()
+                .as_str(),
         ),
     );
 

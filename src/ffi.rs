@@ -155,21 +155,21 @@ pub unsafe extern "C" fn phonex_string_free(s: *mut c_char) {
     }
 }
 
+static LIVE_ENGINES: LazyLock<DashSet<usize>> = LazyLock::new(DashSet::new);
+static LIVE_STREAMS: LazyLock<DashSet<usize>> = LazyLock::new(DashSet::new);
+
 /// Free an inference engine previously created by `phonex_engine_new`.
 ///
 /// # Safety
 /// `engine` must be a pointer returned by `phonex_engine_new` and not yet freed,
 /// or `NULL` (in which case this is a no-op).
 #[unsafe(no_mangle)]
-static LIVE_ENGINES: LazyLock<DashSet<usize>> = LazyLock::new(DashSet::new);
-static LIVE_STREAMS: LazyLock<DashSet<usize>> = LazyLock::new(DashSet::new);
-
 pub unsafe extern "C" fn phonex_engine_free(engine: *mut PhonexEngine) {
     if engine.is_null() {
         return;
     }
     let key = engine as usize;
-    if !LIVE_ENGINES.remove(&key).is_some() {
+    if LIVE_ENGINES.remove(&key).is_none() {
         return;
     }
     let _ = unsafe { Box::from_raw(engine) };
@@ -384,7 +384,7 @@ pub unsafe extern "C" fn phonex_stream_free(stream: *mut PhonexStream) {
         return;
     }
     let key = stream as usize;
-    if !LIVE_STREAMS.remove(&key).is_some() {
+    if LIVE_STREAMS.remove(&key).is_none() {
         return;
     }
     let _ = unsafe { Box::from_raw(stream) };
@@ -457,4 +457,3 @@ mod tests {
         unsafe { phonex_engine_free(ptr) };
     }
 }
-

@@ -116,7 +116,9 @@ impl Language {
             Language::German => "models/sherpa-onnx-streaming-zipformer-de-kroko-2025-08-06",
             Language::Spanish => "models/sherpa-onnx-streaming-zipformer-es-kroko-2025-08-06",
             Language::Bengali => "models/sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09",
-            Language::ChineseStreaming => "models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30",
+            Language::ChineseStreaming => {
+                "models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30"
+            }
             Language::KoreanStreaming => "models/sherpa-onnx-streaming-zipformer-korean-2024-06-16",
             Language::EnglishStreaming => "models/sherpa-onnx-streaming-zipformer-en-2023-06-26",
         }
@@ -135,16 +137,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     // Load config file if specified
-    let config = cli.config.as_deref()
+    let config = cli
+        .config
+        .as_deref()
         .map(phonex::config::from_file)
         .transpose()?
         .unwrap_or_default();
 
     // Apply logging config
-    let log_format = std::env::var("PHONEX_LOG_FORMAT")
-        .unwrap_or_else(|_| config.logging.format.clone());
-    let log_filter = std::env::var("PHONEX_LOG_FILTER")
-        .unwrap_or_else(|_| config.logging.filter.clone());
+    let log_format =
+        std::env::var("PHONEX_LOG_FORMAT").unwrap_or_else(|_| config.logging.format.clone());
+    let log_filter =
+        std::env::var("PHONEX_LOG_FILTER").unwrap_or_else(|_| config.logging.filter.clone());
     if log_format == "json" {
         tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::new(&log_filter))
@@ -179,13 +183,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "json" => {
                     #[cfg(feature = "diarization")]
                     let result = if diarize {
-                        let (samples, sample_rate) = phonex::audio::AudioPreprocessor::read_wav(&file)?;
+                        let (samples, sample_rate) =
+                            phonex::audio::AudioPreprocessor::read_wav(&file)?;
                         let samples = if sample_rate == engine.info.sample_rate as usize {
                             samples
                         } else {
-                            phonex::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)?
+                            phonex::audio::AudioPreprocessor::typhoon()
+                                .resample(&samples, sample_rate)?
                         };
-                        let mut triplet = phonex::inference::SessionTriplet::from_model_dir(&model_dir, &engine.info)?;
+                        let mut triplet = phonex::inference::SessionTriplet::from_model_dir(
+                            &model_dir,
+                            &engine.info,
+                        )?;
                         engine.transcribe_samples_with_diarization(&samples, &mut triplet)?
                     } else {
                         engine.transcribe_file_with_details(&file)?
@@ -210,18 +219,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             // CLI overrides config
             let cfg = config.clone();
-            let model_dir = model_dir.or_else(|| cfg.model.dir.clone())
+            let model_dir = model_dir
+                .or_else(|| cfg.model.dir.clone())
                 .or_else(|| language.map(|l| l.model_dir().to_string()))
-                .unwrap_or_else(|| cfg.model.language.as_ref()
-                    .and_then(|l| Language::from_str(l, true).ok())
-                    .map(|l| l.model_dir().to_string())
-                    .unwrap_or_else(|| Language::English.model_dir().to_string()));
-            let bind = if bind == "127.0.0.1" { cfg.server.bind.clone() } else { bind };
+                .unwrap_or_else(|| {
+                    cfg.model
+                        .language
+                        .as_ref()
+                        .and_then(|l| Language::from_str(l, true).ok())
+                        .map(|l| l.model_dir().to_string())
+                        .unwrap_or_else(|| Language::English.model_dir().to_string())
+                });
+            let bind = if bind == "127.0.0.1" {
+                cfg.server.bind.clone()
+            } else {
+                bind
+            };
             let port = if port == 8080 { cfg.server.port } else { port };
-            let pool_size = if pool_size == 1 { cfg.model.pool_size } else { pool_size };
-            let diarization_model = diarization_model.or_else(|| cfg.model.diarization_model.clone());
+            let pool_size = if pool_size == 1 {
+                cfg.model.pool_size
+            } else {
+                pool_size
+            };
+            let diarization_model =
+                diarization_model.or_else(|| cfg.model.diarization_model.clone());
             phonex::model::ensure_model(&model_dir)?;
-            run_server(&bind, port, &model_dir, pool_size, diarization_model.as_deref(), &cfg)?;
+            run_server(
+                &bind,
+                port,
+                &model_dir,
+                pool_size,
+                diarization_model.as_deref(),
+                &cfg,
+            )?;
         }
     }
 
@@ -238,8 +268,8 @@ fn run_server(
     diarization_model: Option<&str>,
     config: &phonex::config::PhonexConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use phonex::inference::pool::{SessionPool, SessionTriplet};
     use phonex::inference::Engine;
+    use phonex::inference::pool::{SessionPool, SessionTriplet};
     use phonex::model_config::ModelInfo;
     use phonex::server;
     use phonex::tokenizer::Tokenizer;
@@ -293,7 +323,8 @@ fn run_server(
 
         #[cfg(feature = "tls")]
         if let Some(ref tls) = config.tls {
-            let tls_config = axum_server::tls_rustls::RustlsConfig::from_pem_file(&tls.cert, &tls.key).await?;
+            let tls_config =
+                axum_server::tls_rustls::RustlsConfig::from_pem_file(&tls.cert, &tls.key).await?;
             tracing::info!(cert = %tls.cert, key = %tls.key, "Starting HTTPS server");
             let handle = axum_server::Handle::new();
             let server_handle = handle.clone();
@@ -342,5 +373,3 @@ fn run_server(
     eprintln!("Server feature is not enabled. Rebuild with --features server");
     std::process::exit(1);
 }
-
-

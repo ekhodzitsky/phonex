@@ -21,7 +21,10 @@ pub enum SiamError {
     Shape(#[from] ndarray::ShapeError),
 
     #[error("NDArray shape mismatch: expected {expected:?}, got {got:?}")]
-    ShapeMismatch { expected: Vec<usize>, got: Vec<usize> },
+    ShapeMismatch {
+        expected: Vec<usize>,
+        got: Vec<usize>,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, SiamError>;

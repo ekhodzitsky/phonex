@@ -21,8 +21,7 @@ impl Tokenizer {
         // Build plain token map from tokens.txt as fallback / supplement
         let mut token_map = HashMap::new();
         if !tokens_path.is_empty() && std::path::Path::new(tokens_path).exists() {
-            let text = std::fs::read_to_string(tokens_path)
-                .map_err(crate::SiamError::Io)?;
+            let text = std::fs::read_to_string(tokens_path).map_err(crate::SiamError::Io)?;
             for line in text.lines() {
                 let line = line.trim();
                 if line.is_empty() || line.starts_with('#') {
@@ -30,14 +29,19 @@ impl Tokenizer {
                 }
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() >= 2
-                    && let Ok(id) = parts.last().unwrap().parse::<u32>() {
-                        let token = parts[..parts.len()-1].join(" ");
-                        token_map.insert(id, token);
-                    }
+                    && let Ok(id) = parts.last().unwrap().parse::<u32>()
+                {
+                    let token = parts[..parts.len() - 1].join(" ");
+                    token_map.insert(id, token);
+                }
             }
         }
 
-        Ok(Self { sp, token_map, blank_id })
+        Ok(Self {
+            sp,
+            token_map,
+            blank_id,
+        })
     }
 
     pub fn decode_ids(&self, ids: &[u32]) -> String {

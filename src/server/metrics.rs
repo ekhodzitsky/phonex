@@ -138,7 +138,12 @@ impl MetricsRegistry {
             let mut label_keys: Vec<&Labels> = family.values.keys().collect();
             label_keys.sort();
             for labels in label_keys {
-                let _ = writeln!(out, "{name}{} {}", format_labels(labels), family.values[labels]);
+                let _ = writeln!(
+                    out,
+                    "{name}{} {}",
+                    format_labels(labels),
+                    family.values[labels]
+                );
             }
             out.push('\n');
         }
@@ -196,7 +201,11 @@ fn trim_outer_braces(formatted: &str) -> &str {
 
 fn fmt_f64_prom(v: f64) -> String {
     if v.is_infinite() {
-        return if v.is_sign_positive() { "+Inf".into() } else { "-Inf".into() };
+        return if v.is_sign_positive() {
+            "+Inf".into()
+        } else {
+            "-Inf".into()
+        };
     }
     if v.is_nan() {
         return "NaN".into();

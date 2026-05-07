@@ -1,7 +1,7 @@
 //! WebSocket handler for real-time streaming transcription.
 
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::Response;
 use futures_util::StreamExt;
 use std::sync::Arc;
@@ -14,8 +14,8 @@ use crate::streaming_decoder::DecodeToken;
 /// Dispatches between true streaming (low latency) and chunked offline
 /// (works with any model) based on the loaded model type.
 enum WsPipeline {
-    Streaming(Option<crate::streaming_pipeline::StreamingPipeline>),
-    Chunked(crate::chunked_streaming::ChunkedStreamingPipeline),
+    Streaming(Option<Box<crate::streaming_pipeline::StreamingPipeline>>),
+    Chunked(Box<crate::chunked_streaming::ChunkedStreamingPipeline>),
 }
 
 impl WsPipeline {
@@ -117,7 +117,7 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
             &model_info,
             Some(vad_path),
         ) {
-            Ok(p) => WsPipeline::Streaming(Some(p)),
+            Ok(p) => WsPipeline::Streaming(Some(Box::new(p))),
             Err(e) => {
                 let _ = send_error(
                     &mut socket,
@@ -132,7 +132,7 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
     } else {
         let engine = state.engine.read().await.clone();
         match crate::chunked_streaming::ChunkedStreamingPipeline::new(engine, vad_path) {
-            Ok(p) => WsPipeline::Chunked(p),
+            Ok(p) => WsPipeline::Chunked(Box::new(p)),
             Err(e) => {
                 let _ = send_error(
                     &mut socket,
@@ -166,7 +166,9 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
         let msg = match tokio::time::timeout(
             std::time::Duration::from_secs(state.limits.ws_idle_timeout_secs),
             socket.next(),
-        ).await {
+        )
+        .await
+        {
             Ok(Some(Ok(msg))) => msg,
             Ok(Some(Err(_)) | None) => break,
             Err(_) => break,
@@ -188,12 +190,9 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
 
                 pending_samples += samples.len();
                 if pending_samples > MAX_PENDING_SAMPLES {
-                    let _ = send_error(
-                        &mut socket,
-                        "Audio buffer full",
-                        "backpressure",
-                        Some(5000),
-                    ).await;
+                    let _ =
+                        send_error(&mut socket, "Audio buffer full", "backpressure", Some(5000))
+                            .await;
                     break;
                 }
 
@@ -209,7 +208,9 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
                             };
                             if socket
                                 .send(Message::Text(
-                                    serde_json::to_string(&reply).unwrap_or_else(|_| "{}".into()).into(),
+                                    serde_json::to_string(&reply)
+                                        .unwrap_or_else(|_| "{}".into())
+                                        .into(),
                                 ))
                                 .await
                                 .is_err()
@@ -246,15 +247,16 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
                     }
                     Ok(ClientMessage::Configure { sample_rate }) => {
                         if let Some(rate) = sample_rate
-                            && !crate::server::SUPPORTED_RATES.contains(&rate) {
-                                let _ = send_error(
-                                    &mut socket,
-                                    &format!("Unsupported sample rate: {rate}"),
-                                    "invalid_sample_rate",
-                                    None,
-                                )
-                                .await;
-                            }
+                            && !crate::server::SUPPORTED_RATES.contains(&rate)
+                        {
+                            let _ = send_error(
+                                &mut socket,
+                                &format!("Unsupported sample rate: {rate}"),
+                                "invalid_sample_rate",
+                                None,
+                            )
+                            .await;
+                        }
                     }
                     Err(_) => {
                         // Plain-text commands for simple clients.
@@ -294,17 +296,15 @@ async fn flush_and_send_final(socket: &mut WebSocket, pipeline: &mut WsPipeline)
                 words: vec![],
             };
             let _ = socket
-                .send(Message::Text(serde_json::to_string(&msg).unwrap_or_else(|_| "{}".into()).into()))
+                .send(Message::Text(
+                    serde_json::to_string(&msg)
+                        .unwrap_or_else(|_| "{}".into())
+                        .into(),
+                ))
                 .await;
         }
         Err(e) => {
-            let _ = send_error(
-                socket,
-                &format!("Flush error: {e}"),
-                "flush_error",
-                None,
-            )
-            .await;
+            let _ = send_error(socket, &format!("Flush error: {e}"), "flush_error", None).await;
         }
     }
 }
@@ -319,10 +319,7 @@ fn bytes_to_f32_samples(data: &[u8]) -> Result<Vec<f32>, &'static str> {
 
 // Keep the existing /stream handler below ...
 
-pub async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<Arc<AppState>>,
-) -> Response {
+pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
@@ -356,7 +353,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
         let msg = match tokio::time::timeout(
             std::time::Duration::from_secs(state.limits.ws_idle_timeout_secs),
             socket.next(),
-        ).await {
+        )
+        .await
+        {
             Ok(Some(Ok(msg))) => msg,
             Ok(Some(Err(_)) | None) => break,
             Err(_) => break,
@@ -382,35 +381,47 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 // Check if we should process (checkout per-operation, not per-connection)
                 if stream_state.should_process() {
                     match engine.pool.try_checkout() {
-                        Some(mut guard) => match engine.process_chunk(&[], &mut stream_state, &mut guard) {
-                            Ok(segments) => {
-                                for seg in segments {
-                                    let msg = if seg.is_final {
-                                        ServerMessage::Final {
-                                            text: seg.text.to_string(),
-                                            timestamp: seg.timestamp,
-                                            words: seg.words.to_vec(),
+                        Some(mut guard) => {
+                            match engine.process_chunk(&[], &mut stream_state, &mut guard) {
+                                Ok(segments) => {
+                                    for seg in segments {
+                                        let msg = if seg.is_final {
+                                            ServerMessage::Final {
+                                                text: seg.text.to_string(),
+                                                timestamp: seg.timestamp,
+                                                words: seg.words.to_vec(),
+                                            }
+                                        } else {
+                                            ServerMessage::Partial {
+                                                text: seg.text.to_string(),
+                                                timestamp: seg.timestamp,
+                                                words: seg.words.to_vec(),
+                                            }
+                                        };
+                                        if socket
+                                            .send(Message::Text(
+                                                serde_json::to_string(&msg)
+                                                    .unwrap_or_else(|_| "{}".into())
+                                                    .into(),
+                                            ))
+                                            .await
+                                            .is_err()
+                                        {
+                                            break;
                                         }
-                                    } else {
-                                        ServerMessage::Partial {
-                                            text: seg.text.to_string(),
-                                            timestamp: seg.timestamp,
-                                            words: seg.words.to_vec(),
-                                        }
-                                    };
-                                    if socket
-                                        .send(Message::Text(serde_json::to_string(&msg).unwrap_or_else(|_| "{}".into()).into()))
-                                        .await
-                                        .is_err()
-                                    {
-                                        break;
                                     }
                                 }
+                                Err(e) => {
+                                    let _ = send_error(
+                                        &mut socket,
+                                        &format!("{e}"),
+                                        "inference_error",
+                                        None,
+                                    )
+                                    .await;
+                                }
                             }
-                            Err(e) => {
-                                let _ = send_error(&mut socket, &format!("{e}"), "inference_error", None).await;
-                            }
-                        },
+                        }
                         None => {
                             tracing::debug!("Pool empty, buffering audio for later");
                         }
@@ -427,8 +438,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                         stream_state.clear();
                     }
                     Ok(ClientMessage::Stop) => {
-                        let seg = engine.pool.try_checkout()
-                            .and_then(|mut guard| engine.flush_state(&mut stream_state, &mut guard));
+                        let seg = engine.pool.try_checkout().and_then(|mut guard| {
+                            engine.flush_state(&mut stream_state, &mut guard)
+                        });
                         if let Some(seg) = seg {
                             let msg = ServerMessage::Final {
                                 text: seg.text.to_string(),
@@ -436,7 +448,11 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                                 words: seg.words.to_vec(),
                             };
                             let _ = socket
-                                .send(Message::Text(serde_json::to_string(&msg).unwrap_or_else(|_| "{}".into()).into()))
+                                .send(Message::Text(
+                                    serde_json::to_string(&msg)
+                                        .unwrap_or_else(|_| "{}".into())
+                                        .into(),
+                                ))
                                 .await;
                         }
                         flushed = true;
@@ -444,15 +460,16 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                     }
                     Ok(ClientMessage::Configure { sample_rate }) => {
                         if let Some(rate) = sample_rate
-                            && !crate::server::SUPPORTED_RATES.contains(&rate) {
-                                let _ = send_error(
-                                    &mut socket,
-                                    &format!("Unsupported sample rate: {rate}"),
-                                    "invalid_sample_rate",
-                                    None,
-                                )
-                                .await;
-                            }
+                            && !crate::server::SUPPORTED_RATES.contains(&rate)
+                        {
+                            let _ = send_error(
+                                &mut socket,
+                                &format!("Unsupported sample rate: {rate}"),
+                                "invalid_sample_rate",
+                                None,
+                            )
+                            .await;
+                        }
                     }
                     Err(_) => {
                         // Plain text commands for simple clients
@@ -461,8 +478,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                                 stream_state.clear();
                             }
                             "STOP" => {
-                                let seg = engine.pool.try_checkout()
-                                    .and_then(|mut guard| engine.flush_state(&mut stream_state, &mut guard));
+                                let seg = engine.pool.try_checkout().and_then(|mut guard| {
+                                    engine.flush_state(&mut stream_state, &mut guard)
+                                });
                                 if let Some(seg) = seg {
                                     let msg = ServerMessage::Final {
                                         text: seg.text.to_string(),
@@ -471,7 +489,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                                     };
                                     let _ = socket
                                         .send(Message::Text(
-                                            serde_json::to_string(&msg).unwrap_or_else(|_| "{}".into()).into(),
+                                            serde_json::to_string(&msg)
+                                                .unwrap_or_else(|_| "{}".into())
+                                                .into(),
                                         ))
                                         .await;
                                 }
@@ -489,7 +509,9 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     }
 
     if !flushed {
-        let seg = engine.pool.try_checkout()
+        let seg = engine
+            .pool
+            .try_checkout()
             .and_then(|mut guard| engine.flush_state(&mut stream_state, &mut guard));
         if let Some(seg) = seg {
             let msg = ServerMessage::Final {
@@ -498,7 +520,11 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 words: seg.words.to_vec(),
             };
             let _ = socket
-                .send(Message::Text(serde_json::to_string(&msg).unwrap_or_else(|_| "{}".into()).into()))
+                .send(Message::Text(
+                    serde_json::to_string(&msg)
+                        .unwrap_or_else(|_| "{}".into())
+                        .into(),
+                ))
                 .await;
         }
     }
@@ -515,7 +541,11 @@ async fn send_ready_message(
         supported_rates: crate::server::SUPPORTED_RATES.to_vec(),
     };
     socket
-        .send(Message::Text(serde_json::to_string(&ready).unwrap_or_else(|_| "{}".into()).into()))
+        .send(Message::Text(
+            serde_json::to_string(&ready)
+                .unwrap_or_else(|_| "{}".into())
+                .into(),
+        ))
         .await
 }
 
@@ -531,6 +561,10 @@ async fn send_error(
         retry_after_ms,
     };
     socket
-        .send(Message::Text(serde_json::to_string(&msg).unwrap_or_else(|_| "{}".into()).into()))
+        .send(Message::Text(
+            serde_json::to_string(&msg)
+                .unwrap_or_else(|_| "{}".into())
+                .into(),
+        ))
         .await
 }
