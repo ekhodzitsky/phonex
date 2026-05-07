@@ -162,3 +162,15 @@ harness = false
 [[bench]]
 name = "streaming_latency"
 harness = false
+
+[[bench]]
+name = "chunked_latency"
+harness = false
+
+[[bench]]
+name = "ws_latency"
+harness = false
+
+[[bench]]
+name = "pool_bench"
+harness = false
