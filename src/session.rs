@@ -31,13 +31,26 @@ fn load_onnx_session_impl(path: &str, #[allow(unused_variables)] force_cpu: bool
             .with_compute_units(ort::ep::coreml::ComputeUnits::CPUAndNeuralEngine)
             .with_specialization_strategy(ort::ep::coreml::SpecializationStrategy::FastPrediction)
             .build();
-        let mut builder = builder
+        builder = builder
             .with_execution_providers([ep])
             .map_err(|e| ort_err("ORT execution provider error", e))?;
         let session = builder
             .commit_from_file(path)
             .map_err(|e| ort_err("ORT commit error", e))?;
         tracing::info!(model = %path, "Loaded ONNX session with CoreML (experimental — may be slower than CPU for some models)");
+        return Ok(session);
+    }
+
+    #[cfg(feature = "cuda")]
+    if !force_cpu {
+        let ep = ort::ep::CUDA::default().build();
+        builder = builder
+            .with_execution_providers([ep])
+            .map_err(|e| ort_err("ORT execution provider error", e))?;
+        let session = builder
+            .commit_from_file(path)
+            .map_err(|e| ort_err("ORT commit error", e))?;
+        tracing::info!(model = %path, "Loaded ONNX session with CUDA");
         return Ok(session);
     }
 

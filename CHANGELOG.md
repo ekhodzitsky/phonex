@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **gRPC API** — `phonex.TranscriptionService` with `Transcribe` (offline) and `StreamTranscribe` (bi-di streaming) RPCs. Enabled via `--grpc-port` and `grpc` feature.
 - **OpenAPI / Swagger UI** — auto-generated docs at `/docs` and `/openapi.json` (REST API). Powered by `utoipa`.
 - **Word-level timestamps in streaming** — `DecodeToken` carries `start`/`end` seconds per word, exposed through gRPC streaming.
+- **CUDA execution provider** — `cuda` feature enables NVIDIA GPU acceleration via ONNX Runtime CUDA EP. Automatically selected at session load time on Linux.
 
 ## [0.2.3] - 2025-05-07
 

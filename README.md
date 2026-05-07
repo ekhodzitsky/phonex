@@ -142,6 +142,15 @@ See [docs/BUILD.md](docs/BUILD.md) for Linux, Windows, and CoreML setup.
 
 RTF < 1.0 means faster than real-time. CPU is recommended for all workloads — CoreML is currently slower for Zipformer streaming on Apple Silicon.
 
+### GPU Acceleration
+
+| Feature | Platform | Command |
+|---------|----------|---------|
+| CoreML | macOS (Apple Silicon) | `cargo build --features coreml` |
+| CUDA | Linux (NVIDIA) | `cargo build --features cuda` |
+
+CUDA requires NVIDIA drivers and cuDNN. See [docs/BUILD.md](docs/BUILD.md) for setup.
+
 ## 🏗️ Architecture
 
 phonex is a thin Rust wrapper around Sherpa-ONNX Zipformer models:
