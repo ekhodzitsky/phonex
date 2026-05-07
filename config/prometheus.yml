@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'phonex'
+    static_configs:
+      - targets: ['phonex:8080']
+    metrics_path: /metrics

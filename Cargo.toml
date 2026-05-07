@@ -16,6 +16,7 @@ default = ["server"]
 server = ["dep:axum", "dep:tokio-stream", "dep:tokio-util", "dep:tower-http", "dep:tower", "dep:utoipa", "dep:utoipa-swagger-ui"]
 grpc = ["server", "dep:tonic", "dep:tonic-health", "dep:prost", "dep:async-stream"]
 diarization = ["dep:polyvoice"]
+tls = ["server", "dep:axum-server", "dep:rustls-pemfile"]
 coreml = ["ort/coreml"]
 cuda = ["ort/cuda"]
 ffi = ["ort/nnapi"]
@@ -109,6 +110,13 @@ dashmap = "6"
 
 # SentencePiece tokenization
 sentencepiece = "0.13"
+
+# Configuration file parsing
+serde_yaml = "0.9"
+
+# TLS for HTTP server
+axum-server = { version = "0.7", features = ["tls-rustls"], optional = true }
+rustls-pemfile = { version = "2", optional = true }
 
 # N-dimensional arrays
 ndarray = "0.17"

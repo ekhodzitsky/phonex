@@ -39,19 +39,20 @@ First run downloads the model automatically (~30–600 MB depending on language)
 
 | Language | Offline | Streaming | Flag |
 |----------|---------|-----------|------|
-| 🇺🇸 English | ✅ | ✅ | `--language english` |
-| 🇨🇳 Chinese + English | ✅ | — | `--language chinese` |
+| 🇺🇸 English | ✅ | ✅ | `--language english` / `--language english-streaming` |
+| 🇨🇳 Chinese + English | ✅ | ✅ | `--language chinese` / `--language chinese-streaming` |
 | 🇯🇵 Japanese | ✅ | — | `--language japanese` |
-| 🇰🇷 Korean | ✅ | ✅ | `--language korean` |
+| 🇰🇷 Korean | ✅ | ✅ | `--language korean` / `--language korean-streaming` |
 | 🇷🇺 Russian | ✅ | — | `--language russian` |
 | 🇹🇭 Thai | ✅ | — | `--language thai` |
 | 🇻🇳 Vietnamese | ✅ | — | `--language vietnamese` |
 | 🇭🇰 Cantonese | ✅ | — | `--language cantonese` |
-| 🇫🇷 French | — | ✅ | `--language fr20230414` |
-| 🇩🇪 German | — | ✅ | `--language de-kroko-20250806` |
-| 🇪🇸 Spanish | — | ✅ | `--language es-kroko-20250806` |
+| 🇫🇷 French | — | ✅ | `--language french` |
+| 🇩🇪 German | — | ✅ | `--language german` |
+| 🇪🇸 Spanish | — | ✅ | `--language spanish` |
+| 🇧🇩 Bengali | — | ✅ | `--language bengali` |
 
-> **Streaming** = real-time chunk-by-chunk transcription via the `streaming` binary.  
+> **Streaming** = real-time WebSocket transcription (true Zipformer streaming for streaming models, VAD-chunked for offline).  
 > **Offline** = end-to-end file transcription via `phonex transcribe` or the HTTP API.
 
 ## 📊 Why phonex?
@@ -131,6 +132,21 @@ cargo install --git https://github.com/ekhodzitsky/phonex
 ```
 
 See [docs/BUILD.md](docs/BUILD.md) for Linux, Windows, and CoreML setup.
+
+### Configuration file
+
+```bash
+cp phonex.yaml.example phonex.yaml
+phonex serve --config phonex.yaml
+```
+
+### Docker Compose (with Prometheus + Grafana)
+
+```bash
+docker compose up
+# Open Grafana at http://localhost:3000 (admin/admin)
+# Open Prometheus at http://localhost:9090
+```
 
 ## ⚡ Performance
 

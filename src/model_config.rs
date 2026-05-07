@@ -165,6 +165,14 @@ pub struct ModelInfo {
     pub model_name: String,
 }
 
+impl ModelInfo {
+    /// Returns `true` if the model is a streaming (online) model.
+    /// Streaming models have `cached_*` inputs in the encoder ONNX graph.
+    pub fn is_streaming(&self) -> bool {
+        self.encoder_inputs.iter().any(|name| name.starts_with("cached_"))
+    }
+}
+
 trait Named {
     fn name(&self) -> &str;
 }

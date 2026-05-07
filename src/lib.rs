@@ -12,6 +12,8 @@ pub mod inference;
 pub mod joiner;
 pub mod model;
 pub mod model_config;
+pub mod chunked_streaming;
+pub mod config;
 #[cfg(feature = "server")]
 pub mod protocol;
 #[cfg(feature = "server")]

@@ -69,6 +69,20 @@ enum Language {
     Thai,
     /// Vietnamese — small int8 model (offline)
     Vietnamese,
+    /// French streaming
+    French,
+    /// German streaming (Kroko)
+    German,
+    /// Spanish streaming (Kroko)
+    Spanish,
+    /// Bengali streaming
+    Bengali,
+    /// Chinese streaming
+    ChineseStreaming,
+    /// Korean streaming
+    KoreanStreaming,
+    /// English streaming (LibriSpeech)
+    EnglishStreaming,
 }
 
 impl Language {
@@ -82,6 +96,13 @@ impl Language {
             Language::Russian => "models/sherpa-onnx-small-zipformer-ru-2024-09-18",
             Language::Thai => "models/sherpa-onnx-zipformer-thai-2024-06-20",
             Language::Vietnamese => "models/sherpa-onnx-zipformer-vi-30M-int8-2026-02-09",
+            Language::French => "models/sherpa-onnx-streaming-zipformer-fr-2023-04-14",
+            Language::German => "models/sherpa-onnx-streaming-zipformer-de-kroko-2025-08-06",
+            Language::Spanish => "models/sherpa-onnx-streaming-zipformer-es-kroko-2025-08-06",
+            Language::Bengali => "models/sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09",
+            Language::ChineseStreaming => "models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30",
+            Language::KoreanStreaming => "models/sherpa-onnx-streaming-zipformer-korean-2024-06-16",
+            Language::EnglishStreaming => "models/sherpa-onnx-streaming-zipformer-en-2023-06-26",
         }
     }
 }

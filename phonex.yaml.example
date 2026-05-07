@@ -1,0 +1,22 @@
+model:
+  language: english
+  pool_size: 2
+
+server:
+  bind: "0.0.0.0"
+  port: 8080
+  limits:
+    body_limit_mb: 500
+    rate_limit_per_minute: 0
+    max_ws_connections: 100
+    ws_idle_timeout_secs: 60
+  auth:
+    api_key: null
+  cors:
+    origins:
+      - "http://localhost:3000"
+      - "http://localhost:5173"
+
+logging:
+  format: json
+  filter: "info"

@@ -324,6 +324,17 @@ impl StreamingVad {
         output
     }
 
+    /// Process samples and detect speech→silence transitions.
+    ///
+    /// Returns `(speech_samples, speech_ended)` where `speech_ended` is `true`
+    /// if the VAD transitioned from Speech to Silence during this batch.
+    pub fn process_with_transitions(&mut self, samples: &[f32]) -> (Vec<f32>, bool) {
+        let was_speech = self.state == VadState::Speech;
+        let output = self.process(samples);
+        let speech_ended = was_speech && self.state == VadState::Silence;
+        (output, speech_ended)
+    }
+
     /// Reset the VAD state machine and the underlying Silero model.
     pub fn reset(&mut self) {
         self.vad.reset();

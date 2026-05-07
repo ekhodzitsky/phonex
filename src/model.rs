@@ -95,6 +95,16 @@ pub const KNOWN_MODELS: &[ModelSpec] = &[
         archive_name: "sherpa-onnx-streaming-zipformer-korean-2024-06-16.tar.bz2",
         url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-korean-2024-06-16.tar.bz2",
     },
+    ModelSpec {
+        dir_name: "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30",
+        archive_name: "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.tar.bz2",
+        url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.tar.bz2",
+    },
+    ModelSpec {
+        dir_name: "sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09",
+        archive_name: "sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09.tar.bz2",
+        url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09.tar.bz2",
+    },
 ];
 
 /// Find a model spec by directory name.

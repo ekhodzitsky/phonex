@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CUDA execution provider** — `cuda` feature enables NVIDIA GPU acceleration via ONNX Runtime CUDA EP. Automatically selected at session load time on Linux.
 - **Model hot-swap** — `POST /v1/admin/reload` replaces the loaded model without server restart. New requests immediately use the new model; in-flight requests finish on the old engine before the pool is recycled.
 - **Speaker diarization** — integrated `polyvoice` for speaker diarization. Add `?diarize=true` to `/v1/transcribe` or `--diarize` to CLI. Requires `diarization` feature and a speaker embedding ONNX model (e.g. WeSpeaker ResNet34).
+- **Streaming for all languages** — unified WebSocket endpoint auto-detects streaming vs offline models. Streaming models use true Zipformer streaming (~320 ms latency). Offline models use VAD-triggered chunked pseudo-streaming (~500–800 ms utterance latency). Added French, German, Spanish, Bengali, Chinese streaming, Korean streaming to the server Language enum.
+- **YAML configuration** — `phonex.yaml` config file with `--config` flag. Load order: defaults → config → env → CLI.
+- **TLS** — HTTPS and gRPC-over-TLS via `--features tls` and `tls.cert` / `tls.key` in config.
+- **Docker Compose** — bundled Prometheus + Grafana stack with pre-loaded dashboard.
 
 ## [0.2.3] - 2025-05-07
 

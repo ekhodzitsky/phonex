@@ -28,3 +28,7 @@ recon/
 # Added by cargo
 
 /target
+
+# Config & secrets
+phonex.yaml
+tls/

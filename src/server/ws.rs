@@ -9,6 +9,48 @@ use std::sync::Arc;
 use crate::inference::Engine;
 use crate::protocol::{ClientMessage, ServerMessage};
 use crate::server::http::AppState;
+use crate::streaming_decoder::DecodeToken;
+
+/// Unified pipeline enum for WebSocket streaming.
+/// Dispatches between true streaming (low latency) and chunked offline
+/// (works with any model) based on the loaded model type.
+enum WsPipeline {
+    Streaming(crate::streaming_pipeline::StreamingPipeline),
+    Chunked(crate::chunked_streaming::ChunkedStreamingPipeline),
+}
+
+impl WsPipeline {
+    async fn accept_audio(&mut self, samples: &[f32]) -> crate::Result<Vec<DecodeToken>> {
+        match self {
+            WsPipeline::Streaming(p) => std::future::ready(p.accept_audio(samples)).await,
+            WsPipeline::Chunked(p) => p.accept_audio(samples).await,
+        }
+    }
+
+    fn text(&self) -> String {
+        match self {
+            WsPipeline::Streaming(p) => p.text(),
+            WsPipeline::Chunked(p) => p.text(),
+        }
+    }
+
+    async fn flush(&mut self) -> crate::Result<String> {
+        match self {
+            WsPipeline::Streaming(p) => std::future::ready(p.flush()).await,
+            WsPipeline::Chunked(p) => p.flush().await,
+        }
+    }
+
+    fn reset(&mut self) {
+        match self {
+            WsPipeline::Streaming(p) => p.reset(),
+            WsPipeline::Chunked(_p) => {
+                // Chunked pipeline does not have a reset method;
+                // clear state manually if needed.
+            }
+        }
+    }
+}
 
 /// GET /v1/transcribe/stream — WebSocket upgrade for real-time streaming transcription.
 pub async fn ws_v1_transcribe_stream(
@@ -44,22 +86,43 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
         None
     };
 
-    // Build a StreamingPipeline for this connection.
-    let mut pipeline = match crate::streaming_pipeline::StreamingPipeline::from_model_dir(
-        &*state.model_dir.read().await,
-        &*state.model_info.read().await,
-        None,
-    ) {
-        Ok(p) => p,
-        Err(e) => {
-            let _ = send_error(
-                &mut socket,
-                &format!("Failed to load streaming pipeline: {e}"),
-                "pipeline_error",
-                None,
-            )
-            .await;
-            return;
+    // Build the appropriate pipeline for this connection.
+    let model_info = state.model_info.read().await.clone();
+    let model_dir = state.model_dir.read().await.clone();
+    let vad_path = "models/silero_vad.onnx";
+
+    let mut pipeline = if model_info.is_streaming() {
+        match crate::streaming_pipeline::StreamingPipeline::from_model_dir(
+            &model_dir,
+            &model_info,
+            Some(vad_path),
+        ) {
+            Ok(p) => WsPipeline::Streaming(p),
+            Err(e) => {
+                let _ = send_error(
+                    &mut socket,
+                    &format!("Failed to load streaming pipeline: {e}"),
+                    "pipeline_error",
+                    None,
+                )
+                .await;
+                return;
+            }
+        }
+    } else {
+        let engine = state.engine.read().await.clone();
+        match crate::chunked_streaming::ChunkedStreamingPipeline::new(engine, vad_path) {
+            Ok(p) => WsPipeline::Chunked(p),
+            Err(e) => {
+                let _ = send_error(
+                    &mut socket,
+                    &format!("Failed to load chunked pipeline: {e}"),
+                    "pipeline_error",
+                    None,
+                )
+                .await;
+                return;
+            }
         }
     };
 
@@ -114,7 +177,7 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
                     break;
                 }
 
-                match pipeline.accept_audio(&samples) {
+                match pipeline.accept_audio(&samples).await {
                     Ok(new_tokens) => {
                         if !new_tokens.is_empty() {
                             let text = pipeline.text();
@@ -201,8 +264,8 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
     }
 }
 
-async fn flush_and_send_final(socket: &mut WebSocket, pipeline: &mut crate::streaming_pipeline::StreamingPipeline) {
-    match pipeline.flush() {
+async fn flush_and_send_final(socket: &mut WebSocket, pipeline: &mut WsPipeline) {
+    match pipeline.flush().await {
         Ok(text) => {
             let timestamp = crate::inference::streaming::now_timestamp();
             let msg = ServerMessage::Final {

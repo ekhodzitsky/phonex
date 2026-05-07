@@ -1,21 +1,45 @@
+version: "3.8"
+
 services:
   phonex:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - TARGETARCH=${TARGETARCH:-arm64}
+    build: .
     ports:
       - "8080:8080"
+      - "50051:50051"
     volumes:
-      - ./models:/app/models
+      - ./phonex.yaml:/etc/phonex/phonex.yaml:ro
+      - ./models:/app/models:ro
+      - ./tls:/etc/phonex/tls:ro
     environment:
-      - RUST_LOG=info
-      - MODEL_DIR=/app/models
-    restart: unless-stopped
+      - PHONEX_LOG_FORMAT=json
+    command:
+      - phonex
+      - serve
+      - --config
+      - /etc/phonex/phonex.yaml
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./config/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./config/grafana/dashboard.json:/var/lib/grafana/dashboards/phonex.json:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
