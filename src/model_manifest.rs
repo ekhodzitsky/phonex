@@ -26,8 +26,7 @@ struct ManifestFile {
 ///
 /// Returns an error if the file is missing or malformed.
 pub fn load_manifest() -> crate::Result<Vec<ModelManifest>> {
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-        .unwrap_or_else(|_| ".".to_string());
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
     let path = Path::new(&manifest_dir).join("models/manifest.json");
     let text = std::fs::read_to_string(&path).map_err(|e| {
         crate::SiamError::Inference(format!(
