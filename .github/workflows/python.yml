@@ -16,20 +16,47 @@ jobs:
           - os: ubuntu-latest
             target: x86_64
             manylinux: auto
+            onnx_arch: x64
+            onnx_dir: onnxruntime-linux-x64-1.25.1
           - os: ubuntu-latest
             target: aarch64
             manylinux: "2_28"
+            onnx_arch: aarch64
+            onnx_dir: onnxruntime-linux-aarch64-1.25.1
           - os: macos-latest
             target: x86_64
+            onnx_arch: none
           - os: macos-latest
             target: aarch64
+            onnx_arch: none
           - os: windows-latest
             target: x86_64
+            onnx_arch: x64
+            onnx_dir: onnxruntime-win-x64-1.25.1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Install ONNX Runtime (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install onnxruntime
+          echo "ORT_LIB_PATH=$(brew --prefix onnxruntime)/lib" >> $GITHUB_ENV
+          echo "DYLD_LIBRARY_PATH=$(brew --prefix onnxruntime)/lib" >> $GITHUB_ENV
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+
+      - name: Install ONNX Runtime (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          curl -fsSL https://github.com/microsoft/onnxruntime/releases/download/v1.25.1/${{ matrix.onnx_dir }}.zip -o onnxruntime.zip
+          unzip -q onnxruntime.zip
+          mv ${{ matrix.onnx_dir }} /c/onnxruntime
+          echo "ORT_LIB_PATH=/c/onnxruntime/lib" >> $GITHUB_ENV
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -37,6 +64,19 @@ jobs:
           args: --release --out dist --features python
           sccache: "true"
           manylinux: ${{ matrix.manylinux }}
+          before-script-linux: |
+            curl -fsSL https://github.com/microsoft/onnxruntime/releases/download/v1.25.1/${{ matrix.onnx_dir }}.tgz -o onnxruntime.tgz
+            tar -xzf onnxruntime.tgz -C /opt
+            mv /opt/${{ matrix.onnx_dir }} /opt/onnxruntime
+            echo "ORT_LIB_PATH=/opt/onnxruntime/lib" >> $GITHUB_ENV
+            echo "LD_LIBRARY_PATH=/opt/onnxruntime/lib" >> $GITHUB_ENV
+            echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+        env:
+          ORT_LIB_PATH: ${{ env.ORT_LIB_PATH }}
+          ORT_PREFER_DYNAMIC_LINK: ${{ env.ORT_PREFER_DYNAMIC_LINK }}
+          LD_LIBRARY_PATH: ${{ env.LD_LIBRARY_PATH }}
+          DYLD_LIBRARY_PATH: ${{ env.DYLD_LIBRARY_PATH }}
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
