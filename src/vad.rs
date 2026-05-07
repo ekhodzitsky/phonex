@@ -360,6 +360,17 @@ mod tests {
     use super::*;
     use crate::audio::AudioPreprocessor;
 
+    const VAD_MODEL: &str = "models/silero_vad.onnx";
+
+    macro_rules! skip_if_no_vad_model {
+        () => {
+            if !std::path::Path::new(VAD_MODEL).exists() {
+                eprintln!("Skipping test: VAD model not found");
+                return;
+            }
+        };
+    }
+
     #[test]
     fn test_vad_config_default() {
         let config = VadConfig::default();
@@ -372,7 +383,8 @@ mod tests {
 
     #[test]
     fn test_vad_segmenter_rejects_nan() {
-        let mut segmenter = VadSegmenter::new("models/silero_vad.onnx").unwrap();
+        skip_if_no_vad_model!();
+        let mut segmenter = VadSegmenter::new(VAD_MODEL).unwrap();
         let mut samples = vec![0.0f32; 512];
         samples[10] = f32::NAN;
         let result = segmenter.segment(&samples);
@@ -383,7 +395,8 @@ mod tests {
 
     #[test]
     fn test_vad_segmenter_rejects_inf() {
-        let mut segmenter = VadSegmenter::new("models/silero_vad.onnx").unwrap();
+        skip_if_no_vad_model!();
+        let mut segmenter = VadSegmenter::new(VAD_MODEL).unwrap();
         let mut samples = vec![0.0f32; 512];
         samples[10] = f32::INFINITY;
         let result = segmenter.segment(&samples);
@@ -394,7 +407,8 @@ mod tests {
 
     #[test]
     fn test_streaming_vad_state_machine() {
-        let mut vad = StreamingVad::new("models/silero_vad.onnx").unwrap();
+        skip_if_no_vad_model!();
+        let mut vad = StreamingVad::new(VAD_MODEL).unwrap();
 
         // All zeros should keep the state machine in Silence.
         let zeros = vec![0.0f32; 512 * 5];
