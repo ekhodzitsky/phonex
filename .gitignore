@@ -20,6 +20,7 @@ models/
 # Local environment
 venv/
 .cargo/
+!.cargo/deny.toml
 recon/
 *.npy
 *.bin
