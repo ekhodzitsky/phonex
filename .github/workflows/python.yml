@@ -40,7 +40,7 @@ jobs:
         run: |
           brew install onnxruntime
           echo "ORT_LIB_PATH=$(brew --prefix onnxruntime)/lib" >> $GITHUB_ENV
-          echo "DYLD_LIBRARY_PATH=$(brew --prefix onnxruntime)/lib" >> $GITHUB_ENV
+          echo "DYLD_LIBRARY_PATH=$(brew --prefix onnxruntime)/lib:$(brew --prefix)/lib" >> $GITHUB_ENV
           echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
 
       - name: Install ONNX Runtime (Windows)
@@ -49,8 +49,8 @@ jobs:
         run: |
           curl -fsSL https://github.com/microsoft/onnxruntime/releases/download/v1.25.1/${{ matrix.onnx_dir }}.zip -o onnxruntime.zip
           unzip -q onnxruntime.zip
-          mv ${{ matrix.onnx_dir }} /c/onnxruntime
-          echo "ORT_LIB_PATH=/c/onnxruntime/lib" >> $GITHUB_ENV
+          mv ${{ matrix.onnx_dir }} C:/onnxruntime
+          echo "ORT_LIB_PATH=C:/onnxruntime/lib" >> $GITHUB_ENV
           echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
 
       - name: Build wheels
