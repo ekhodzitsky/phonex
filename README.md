@@ -82,7 +82,7 @@ phonex serve --language english --port 8080 --pool-size 2
 ```
 
 **Endpoints:**
-- `POST /v1/transcribe` — upload audio, get text
+- `POST /v1/transcribe` — upload audio, get text (`?diarize=true` for speaker diarization)
 - `POST /v1/transcribe/batch` — multiple files at once
 - `POST /v1/transcribe/stream` — SSE streaming
 - `GET /health` — health check

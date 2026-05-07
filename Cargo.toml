@@ -15,6 +15,7 @@ crate-type = ["rlib", "cdylib"]
 default = ["server"]
 server = ["dep:axum", "dep:tokio-stream", "dep:tokio-util", "dep:tower-http", "dep:tower", "dep:utoipa", "dep:utoipa-swagger-ui"]
 grpc = ["server", "dep:tonic", "dep:tonic-health", "dep:prost", "dep:async-stream"]
+diarization = ["dep:polyvoice"]
 coreml = ["ort/coreml"]
 cuda = ["ort/cuda"]
 ffi = ["ort/nnapi"]
@@ -114,6 +115,9 @@ ndarray = "0.17"
 
 # FFT for legacy audio preprocessor
 realfft = "3"
+
+# Speaker diarization
+polyvoice = { version = "0.5", features = ["onnx"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"

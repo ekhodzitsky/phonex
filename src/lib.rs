@@ -5,6 +5,8 @@
 pub mod audio;
 pub mod encoder;
 pub mod decoder;
+#[cfg(feature = "diarization")]
+pub mod diarization;
 pub mod error;
 pub mod inference;
 pub mod joiner;

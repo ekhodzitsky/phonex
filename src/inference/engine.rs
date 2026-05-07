@@ -20,6 +20,8 @@ pub struct Engine {
     pub vocab_size: usize,
     pub info: ModelInfo,
     pub vad: Option<Vad>,
+    #[cfg(feature = "diarization")]
+    pub diarization: Option<crate::diarization::DiarizationEngine>,
 }
 
 impl Engine {
@@ -55,6 +57,8 @@ impl Engine {
             vocab_size,
             info,
             vad: None,
+            #[cfg(feature = "diarization")]
+            diarization: None,
         }
     }
 
@@ -97,6 +101,23 @@ impl Engine {
                 model_path: model_path.into(),
                 ..VadConfig::default()
             }));
+        }
+        self
+    }
+
+    #[cfg(feature = "diarization")]
+    pub fn with_diarization(mut self, model_path: &str) -> Self {
+        let path = std::path::Path::new(model_path);
+        if path.exists() {
+            match crate::diarization::DiarizationEngine::new(path, 256, 24000, 1) {
+                Ok(engine) => {
+                    tracing::info!(model = %model_path, "Loaded diarization engine");
+                    self.diarization = Some(engine);
+                }
+                Err(e) => {
+                    tracing::warn!(model = %model_path, "Failed to load diarization engine: {e}");
+                }
+            }
         }
         self
     }
@@ -285,6 +306,26 @@ impl Engine {
             words: all_words,
             duration_s: samples.len() as f64 / self.info.sample_rate as f64,
         })
+    }
+
+    #[cfg(feature = "diarization")]
+    pub fn transcribe_samples_with_diarization(
+        &self,
+        samples: &[f32],
+        triplet: &mut SessionTriplet,
+    ) -> Result<TranscribeResult, SiamError> {
+        let mut result = self.transcribe_samples(samples, triplet)?;
+        if let Some(ref diarization) = self.diarization {
+            match diarization.diarize(samples) {
+                Ok(turns) => {
+                    crate::diarization::assign_speakers(&mut result.words, &turns);
+                }
+                Err(e) => {
+                    tracing::warn!("Diarization failed: {e}");
+                }
+            }
+        }
+        Ok(result)
     }
 
     pub fn process_chunk(

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Word-level timestamps in streaming** — `DecodeToken` carries `start`/`end` seconds per word, exposed through gRPC streaming.
 - **CUDA execution provider** — `cuda` feature enables NVIDIA GPU acceleration via ONNX Runtime CUDA EP. Automatically selected at session load time on Linux.
 - **Model hot-swap** — `POST /v1/admin/reload` replaces the loaded model without server restart. New requests immediately use the new model; in-flight requests finish on the old engine before the pool is recycled.
+- **Speaker diarization** — integrated `polyvoice` for speaker diarization. Add `?diarize=true` to `/v1/transcribe` or `--diarize` to CLI. Requires `diarization` feature and a speaker embedding ONNX model (e.g. WeSpeaker ResNet34).
 
 ## [0.2.3] - 2025-05-07
 

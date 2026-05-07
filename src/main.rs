@@ -29,6 +29,10 @@ enum Commands {
         /// Output format
         #[arg(short, long, default_value = "text")]
         format: String,
+
+        /// Enable speaker diarization (requires diarization feature and model)
+        #[arg(long)]
+        diarize: bool,
     },
 
     /// Run the HTTP server.
@@ -52,6 +56,10 @@ enum Commands {
         /// Number of parallel inference sessions
         #[arg(long, default_value_t = 1)]
         pool_size: usize,
+
+        /// Path to speaker embedding ONNX model for diarization
+        #[arg(long)]
+        diarization_model: Option<String>,
     },
 }
 
@@ -111,12 +119,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             model_dir,
             language,
             format,
+            diarize,
         } => {
             let model_dir = resolve_model_dir(model_dir, language);
             phonex::model::ensure_model(&model_dir)?;
             let engine = phonex::Engine::load(&model_dir)?;
+            #[cfg(feature = "diarization")]
+            let engine = if diarize {
+                engine.with_diarization("models/wespeaker_resnet34.onnx")
+            } else {
+                engine
+            };
+            #[cfg(not(feature = "diarization"))]
+            let _ = diarize;
             match format.as_str() {
                 "json" => {
+                    #[cfg(feature = "diarization")]
+                    let result = if diarize {
+                        let (samples, sample_rate) = phonex::audio::AudioPreprocessor::read_wav(&file)?;
+                        let samples = if sample_rate == engine.info.sample_rate as usize {
+                            samples
+                        } else {
+                            phonex::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)
+                        };
+                        let mut triplet = phonex::inference::SessionTriplet::from_model_dir(&model_dir, &engine.info)?;
+                        engine.transcribe_samples_with_diarization(&samples, &mut triplet)?
+                    } else {
+                        engine.transcribe_file_with_details(&file)?
+                    };
+                    #[cfg(not(feature = "diarization"))]
                     let result = engine.transcribe_file_with_details(&file)?;
                     println!("{}", serde_json::to_string(&result)?);
                 }
@@ -132,10 +163,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             model_dir,
             language,
             pool_size,
+            diarization_model,
         } => {
             let model_dir = resolve_model_dir(model_dir, language);
             phonex::model::ensure_model(&model_dir)?;
-            run_server(&bind, port, &model_dir, pool_size)?;
+            run_server(&bind, port, &model_dir, pool_size, diarization_model.as_deref())?;
         }
     }
 
@@ -143,11 +175,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(feature = "server")]
+#[allow(unused_variables)]
 fn run_server(
     bind: &str,
     port: u16,
     model_dir: &str,
     pool_size: usize,
+    diarization_model: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use phonex::inference::pool::{SessionPool, SessionTriplet};
     use phonex::inference::Engine;
@@ -175,15 +209,20 @@ fn run_server(
         }
 
         let pool = SessionPool::new(triplets);
-        let engine = Arc::new(
-            Engine::new(pool, tokenizer, info.clone()).with_vad(
-                paths
-                    .vad
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_default()
-                    .as_str(),
-            ),
+        let engine = Engine::new(pool, tokenizer, info.clone()).with_vad(
+            paths
+                .vad
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default()
+                .as_str(),
         );
+        #[cfg(feature = "diarization")]
+        let engine = if let Some(model) = diarization_model {
+            engine.with_diarization(model)
+        } else {
+            engine
+        };
+        let engine = Arc::new(engine);
 
         let addr: SocketAddr = format!("{}:{}", bind, port).parse()?;
         tracing::info!(%addr, "Starting server");

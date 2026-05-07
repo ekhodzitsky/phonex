@@ -221,6 +221,8 @@ pub struct TranscribeQuery {
     pub sample_rate: Option<u32>,
     #[serde(default)]
     pub vad: bool,
+    #[serde(default)]
+    pub diarize: bool,
 }
 
 async fn extract_audio_from_multipart(
@@ -308,6 +310,7 @@ pub async fn transcribe(
     };
     let (body, client_rate) = extract_audio_from_multipart(&mut multipart, &query, state.limits.body_limit_bytes).await?;
     let use_vad = query.vad;
+    let use_diarization = query.diarize;
     let engine = state.engine.read().await.clone();
     let (triplet, reservation) = checkout_triplet(&engine).await?;
 
@@ -323,7 +326,16 @@ pub async fn transcribe(
                 crate::inference::audio::resample(&samples_f32, client_rate, crate::inference::TARGET_SAMPLE_RATE)
                     .unwrap_or_default()
             };
-            if use_vad {
+            if use_diarization {
+                #[cfg(feature = "diarization")]
+                {
+                    engine.transcribe_samples_with_diarization(&samples, &mut triplet)
+                }
+                #[cfg(not(feature = "diarization"))]
+                {
+                    engine.transcribe_samples(&samples, &mut triplet)
+                }
+            } else if use_vad {
                 engine.transcribe_samples_with_vad(&samples, &mut triplet)
             } else {
                 engine.transcribe_samples(&samples, &mut triplet)
