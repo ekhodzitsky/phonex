@@ -1,0 +1,148 @@
+{
+  "models": [
+    {
+      "name": "Russian small offline",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-small-zipformer-ru-2024-09-18.tar.bz2",
+      "sha256": null,
+      "size_bytes": 65000000,
+      "language": "russian",
+      "model_type": "offline"
+    },
+    {
+      "name": "Japanese ReazonSpeech offline",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01.tar.bz2",
+      "sha256": null,
+      "size_bytes": 250000000,
+      "language": "japanese",
+      "model_type": "offline"
+    },
+    {
+      "name": "Vietnamese int8 offline",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-vi-30M-int8-2026-02-09.tar.bz2",
+      "sha256": null,
+      "size_bytes": 30000000,
+      "language": "vietnamese",
+      "model_type": "offline"
+    },
+    {
+      "name": "Chinese + English Gigaspeech offline",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-gigaspeech-2023-12-12.tar.bz2",
+      "sha256": null,
+      "size_bytes": 600000000,
+      "language": "chinese",
+      "model_type": "offline"
+    },
+    {
+      "name": "English LibriSpeech offline",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-en-2023-06-26.tar.bz2",
+      "sha256": null,
+      "size_bytes": 180000000,
+      "language": "english",
+      "model_type": "offline"
+    },
+    {
+      "name": "English LibriHeavy small offline",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-en-libriheavy-20230926-small.tar.bz2",
+      "sha256": null,
+      "size_bytes": 70000000,
+      "language": "english",
+      "model_type": "offline"
+    },
+    {
+      "name": "Thai offline",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-thai-2024-06-20.tar.bz2",
+      "sha256": null,
+      "size_bytes": 180000000,
+      "language": "thai",
+      "model_type": "offline"
+    },
+    {
+      "name": "Cantonese offline",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-cantonese-2024-03-13.tar.bz2",
+      "sha256": null,
+      "size_bytes": 180000000,
+      "language": "cantonese",
+      "model_type": "offline"
+    },
+    {
+      "name": "Chinese + English bilingual offline",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-zh-en-2023-11-22.tar.bz2",
+      "sha256": null,
+      "size_bytes": 180000000,
+      "language": "chinese",
+      "model_type": "offline"
+    },
+    {
+      "name": "Korean offline",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-korean-2024-06-24.tar.bz2",
+      "sha256": null,
+      "size_bytes": 180000000,
+      "language": "korean",
+      "model_type": "offline"
+    },
+    {
+      "name": "English streaming",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-2023-06-21.tar.bz2",
+      "sha256": null,
+      "size_bytes": 78000000,
+      "language": "english",
+      "model_type": "streaming"
+    },
+    {
+      "name": "English streaming (alt)",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-en-2023-06-26.tar.bz2",
+      "sha256": null,
+      "size_bytes": 78000000,
+      "language": "english",
+      "model_type": "streaming"
+    },
+    {
+      "name": "French streaming",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-fr-2023-04-14.tar.bz2",
+      "sha256": null,
+      "size_bytes": 80000000,
+      "language": "french",
+      "model_type": "streaming"
+    },
+    {
+      "name": "German Kroko streaming",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-de-kroko-2025-08-06.tar.bz2",
+      "sha256": null,
+      "size_bytes": 80000000,
+      "language": "german",
+      "model_type": "streaming"
+    },
+    {
+      "name": "Spanish Kroko streaming",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-es-kroko-2025-08-06.tar.bz2",
+      "sha256": null,
+      "size_bytes": 80000000,
+      "language": "spanish",
+      "model_type": "streaming"
+    },
+    {
+      "name": "Korean streaming",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-korean-2024-06-16.tar.bz2",
+      "sha256": null,
+      "size_bytes": 78000000,
+      "language": "korean",
+      "model_type": "streaming"
+    },
+    {
+      "name": "Chinese int8 streaming",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.tar.bz2",
+      "sha256": null,
+      "size_bytes": 40000000,
+      "language": "chinese",
+      "model_type": "streaming"
+    },
+    {
+      "name": "Bengali Vosk streaming",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bn-vosk-2026-02-09.tar.bz2",
+      "sha256": null,
+      "size_bytes": 80000000,
+      "language": "bengali",
+      "model_type": "streaming"
+    }
+  ]
+}
