@@ -110,7 +110,7 @@ streaming --wav audio.wav --language english --chunk-ms 500
 phonex transcribe audio.wav --model-dir models/my-custom-model
 ```
 
-> **Model integrity**: phonex supports SHA-256 checksum verification for downloaded models. You can add an expected hash to `ModelSpec` and the engine will verify the archive before extraction.
+> **Model integrity**: phonex supports SHA-256 checksum verification for downloaded models. You can add an expected hash to `ModelSpec` and the engine will verify the archive before extraction. See `models/manifest.json` for the full list of supported models with pinned URLs and optional SHA-256 hashes.
 
 ## 📦 Installation
 
@@ -118,6 +118,20 @@ phonex transcribe audio.wav --model-dir models/my-custom-model
 
 ```bash
 docker run -p 8080:8080 ghcr.io/ekhodzitsky/phonex:latest
+```
+
+### Python
+
+```bash
+pip install phonex
+```
+
+```python
+from phonex import PhonexEngine
+
+engine = PhonexEngine("models/sherpa-onnx-zipformer-en")
+text = engine.transcribe("audio.wav")
+print(text)
 ```
 
 ### From source
