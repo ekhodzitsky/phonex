@@ -42,7 +42,7 @@ fn maybe_resample(samples: Vec<f32>, sample_rate: usize, target_rate: usize) -> 
     if sample_rate == target_rate {
         samples
     } else {
-        phonex::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate)
+        phonex::audio::AudioPreprocessor::typhoon().resample(&samples, sample_rate).unwrap()
     }
 }
 

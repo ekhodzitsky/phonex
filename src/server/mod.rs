@@ -203,7 +203,8 @@ pub async fn auth_middleware(
     req: axum::extract::Request,
     next: Next,
 ) -> Response {
-    let is_admin = req.uri().path() == "/v1/admin/reload";
+    let path = req.uri().path();
+    let is_admin = path == "/v1/admin/reload" || path == "/metrics";
     let expected_key = if is_admin {
         state.limits.admin_api_key.as_ref().or(state.limits.api_key.as_ref())
     } else {

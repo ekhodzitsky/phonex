@@ -153,6 +153,11 @@ impl VadSegmenter {
     /// Analyze `samples` (16 kHz, mono) and return speech segment boundaries
     /// as `(start_sample, end_sample)` pairs.
     pub fn segment(&mut self, samples: &[f32]) -> crate::Result<Vec<(usize, usize)>> {
+        if samples.iter().any(|s| !s.is_finite()) {
+            return Err(crate::SiamError::Inference(
+                "VAD input contains NaN or infinite samples".into(),
+            ));
+        }
         self.vad.reset();
 
         let window_samples = 512usize;

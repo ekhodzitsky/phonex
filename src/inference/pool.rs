@@ -195,3 +195,43 @@ impl<T> Drop for CheckoutGuard<T> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_checkout_guard_drop_returns_item_on_panic() {
+        let pool = Pool::new(vec![42i32]);
+        assert_eq!(pool.available(), 1);
+
+        // Simulate what happens when spawn_blocking panics:
+        // CheckoutGuard is dropped during unwinding and must return the item.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let guard = pool.try_checkout().unwrap();
+            let owned = guard.into_owned();
+            let _ = owned;
+            panic!("simulated inference panic");
+        }));
+
+        assert!(result.is_err());
+        // After panic unwinding, the item must have been returned to the pool
+        // even though no manual checkin happened.
+        assert_eq!(pool.available(), 1);
+    }
+
+    #[test]
+    fn test_checkout_guard_drop_returns_item_without_panic() {
+        let pool = Pool::new(vec![42i32]);
+        assert_eq!(pool.available(), 1);
+
+        {
+            let guard = pool.try_checkout().unwrap();
+            assert_eq!(pool.available(), 0);
+            let owned = guard.into_owned();
+            drop(owned);
+        }
+
+        assert_eq!(pool.available(), 1);
+    }
+}

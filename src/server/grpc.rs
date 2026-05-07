@@ -111,6 +111,11 @@ impl TranscriptionService for PhonexGrpcService {
 
     type StreamTranscribeStream = Pin<Box<dyn Stream<Item = Result<StreamTranscriptResponse, Status>> + Send>>;
 
+    /// Streaming transcription creates a per-connection `StreamingPipeline`.
+    /// This intentionally bypasses the session pool because each streaming
+    /// connection maintains its own stateful encoder cache and decoder history.
+    /// Sharing sessions across connections would corrupt the streaming state.
+    /// Concurrency is limited by `stream_semaphore` instead.
     #[tracing::instrument(skip(self, request))]
     async fn stream_transcribe(
         &self,

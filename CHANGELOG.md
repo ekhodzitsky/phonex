@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-05-05
+
+### Security
+- ONNX inference in WebSocket and chunked streaming now runs inside `spawn_blocking` to prevent blocking the async runtime and potential denial-of-service.
+- `CheckoutGuard` RAII wrapper ensures inference session pool items are always returned on panic or task cancellation, preventing pool exhaustion.
+- FFI handles use `AcqRel` memory ordering and atomic `disposed` checks to prevent use-after-free and double-free across the C boundary.
+- Model reload endpoint (`POST /v1/admin/reload`) validates that paths are absolute and rejects parent-directory (`..`) traversal attempts.
+- Model archive extraction uses `tar::Entry::unpack_in` to prevent archive path traversal attacks.
+- Session pool checkin uses blocking send with warnings on channel closure during shutdown.
+- VAD model loader returns `Result` instead of panicking when the model file is missing.
+- Streaming flush preserves the audio buffer on error instead of silently dropping buffered audio.
+- Dynamic ONNX dimension probes clamp negative or invalid values to safe defaults instead of casting to `usize::MAX`, preventing out-of-memory crashes.
+- WebSocket handler uses `try_checkout` per operation with proper error handling instead of holding sessions indefinitely.
+- gRPC body size limited to 500 MB and concurrent streaming connections bounded by a semaphore.
+- Admin endpoints (`/v1/admin/reload` and `/metrics`) require a separate `admin_api_key`; they no longer fall back to the regular API key.
+- Per-field multipart upload size limits are enforced before audio processing begins.
+- Rate-limiting no longer trusts `X-Forwarded-For` / `X-Real-IP` by default; the `trust_proxy` flag must be explicitly enabled behind a known reverse proxy.
+- gRPC endpoints require `Authorization: Bearer <key>` authentication on every RPC method.
+- CORS layer uses an explicit allowed-headers whitelist (`Content-Type`, `Authorization`, `X-Request-Id`) instead of a wildcard.
+- SHA-256 checksum verification infrastructure added for model downloads; hashes can be declared in `ModelSpec` and are validated after download.
+
+### Fixed
+- Audio resample ratio bounded to a safe range (1/16 to 16×) to prevent excessive memory allocation on malformed input.
+- Streaming encoder handles missing cached states and missing input tensors gracefully without panicking.
+- Speech buffer in chunked streaming capped at 30 seconds to prevent unbounded memory growth during long utterances.
+- Model archive extraction validated against directory traversal during auto-download.
+- Model configuration auto-generated only when the target path is a valid directory.
+- FFI errors use structured `tracing` logging instead of raw `eprintln` output.
+- Streaming pipeline includes a compile-time `Send` safety assertion.
+- Encoder zero-state tensor creation handles allocation failures gracefully instead of panicking.
+- Explicit CORS allowed-headers whitelist replaces wildcard `Any`.
+- Session pool `PoolGuard` drop warns when an item cannot be returned to the pool.
+- `OwnedReservation` checkin uses blocking send for reliable session return.
+
 ### Added
 - **gRPC API** — `phonex.TranscriptionService` with `Transcribe` (offline) and `StreamTranscribe` (bi-di streaming) RPCs. Enabled via `--grpc-port` and `grpc` feature.
 - **OpenAPI / Swagger UI** — auto-generated docs at `/docs` and `/openapi.json` (REST API). Powered by `utoipa`.
@@ -18,6 +52,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **YAML configuration** — `phonex.yaml` config file with `--config` flag. Load order: defaults → config → env → CLI.
 - **TLS** — HTTPS and gRPC-over-TLS via `--features tls` and `tls.cert` / `tls.key` in config.
 - **Docker Compose** — bundled Prometheus + Grafana stack with pre-loaded dashboard.
+- **`CheckoutGuard`** — safe RAII guard for session pool checkouts that auto-returns items on drop.
+- **`admin_api_key`** — separate API key for privileged endpoints (`/v1/admin/reload`, `/metrics`).
+- **`trust_proxy`** — configuration flag to trust `X-Forwarded-For` / `X-Real-IP` headers for rate-limiting (only enable behind a trusted reverse proxy).
+- **gRPC API key authentication** — Bearer token validation on every gRPC method via request metadata.
+- **SHA-256 model verification infrastructure** — `ModelSpec` supports an optional `sha256` field; downloaded archives are verified against the declared hash before extraction.
 
 ## [0.2.3] - 2025-05-07
 
@@ -83,7 +122,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - VAD-based segmentation with word-level timing
 - Multi-format audio input: WAV, MP3, OGG, FLAC, AAC
 
-[unreleased]: https://github.com/ekhodzitsky/phonex/compare/v0.2.3...HEAD
+[unreleased]: https://github.com/ekhodzitsky/phonex/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/ekhodzitsky/phonex/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/ekhodzitsky/phonex/compare/v0.2.1...v0.2.3
 [0.2.1]: https://github.com/ekhodzitsky/phonex/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ekhodzitsky/phonex/compare/v0.1.0...v0.2.0

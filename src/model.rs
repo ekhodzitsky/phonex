@@ -275,3 +275,82 @@ fn sha256_file(path: &Path) -> crate::Result<String> {
     let result = hasher.finalize();
     Ok(result.iter().map(|b| format!("{:02x}", b)).collect())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    fn make_malicious_tar_bz2(path: &Path) {
+        // Build a raw ustar header for "../etc/passwd" to bypass tar::Builder
+        // path validation.
+        let mut header = [0u8; 512];
+        let name = b"../etc/passwd";
+        header[..name.len()].copy_from_slice(name);
+
+        let mode = b"0000644 ";
+        header[100..108].copy_from_slice(mode);
+        let uid = b"0001750 ";
+        header[108..116].copy_from_slice(uid);
+        let gid = b"0001750 ";
+        header[116..124].copy_from_slice(gid);
+        let size = b"00000000000 ";
+        header[124..136].copy_from_slice(size);
+        let mtime = b"00000000000 ";
+        header[136..148].copy_from_slice(mtime);
+
+        // checksum placeholder (8 spaces)
+        header[148..156].copy_from_slice(b"        ");
+        header[156] = b'0';
+        header[257..263].copy_from_slice(b"ustar\0");
+        header[263..265].copy_from_slice(b"00");
+
+        let sum: u64 = header.iter().map(|&b| b as u64).sum();
+        let cksum = format!("{:06o} \0", sum);
+        header[148..156].copy_from_slice(cksum.as_bytes());
+
+        let file = std::fs::File::create(path).unwrap();
+        let mut encoder =
+            bzip2::write::BzEncoder::new(file, bzip2::Compression::default());
+        encoder.write_all(&header).unwrap();
+        // Two zero-blocks mark end-of-archive
+        encoder.write_all(&[0u8; 1024]).unwrap();
+        encoder.finish().unwrap();
+    }
+
+    #[test]
+    fn test_extract_tar_bz2_rejects_path_traversal() {
+        let dir = tempdir().unwrap();
+        let archive_path = dir.path().join("malicious.tar.bz2");
+        let dest = dir.path().join("dest");
+        std::fs::create_dir(&dest).unwrap();
+
+        make_malicious_tar_bz2(&archive_path);
+
+        // extract_tar_bz2 should either fail or silently skip the entry;
+        // in either case the file must NOT be created outside dest.
+        let _ = extract_tar_bz2(&archive_path, &dest);
+
+        let escaped_path = dir.path().join("etc").join("passwd");
+        assert!(
+            !escaped_path.exists(),
+            "path traversal entry must not be extracted outside destination"
+        );
+    }
+
+    #[test]
+    fn test_sha256_file_matches_expected() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test.txt");
+
+        let mut file = std::fs::File::create(&file_path).unwrap();
+        file.write_all(b"hello world").unwrap();
+        drop(file);
+
+        let result = sha256_file(&file_path).unwrap();
+        let expected =
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
+        assert_eq!(result, expected);
+    }
+}

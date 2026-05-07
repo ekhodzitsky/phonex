@@ -88,6 +88,8 @@ impl Engine {
             vocab_size: 2000,
             info,
             vad: None,
+            #[cfg(feature = "diarization")]
+            diarization: None,
         }
     }
 

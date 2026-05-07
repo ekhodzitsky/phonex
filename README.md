@@ -94,6 +94,7 @@ phonex serve --language english --port 8080 --pool-size 2
 **gRPC** (optional, `--grpc-port 50051`):
 - `Transcribe` — offline transcription with word-level timestamps
 - `StreamTranscribe` — bidirectional streaming with per-word timing
+- API key authentication is enforced on every gRPC method when `--api-key` is set
 
 See `proto/phonex.proto` for the service definition.
 
@@ -108,6 +109,8 @@ streaming --wav audio.wav --language english --chunk-ms 500
 ```bash
 phonex transcribe audio.wav --model-dir models/my-custom-model
 ```
+
+> **Model integrity**: phonex supports SHA-256 checksum verification for downloaded models. You can add an expected hash to `ModelSpec` and the engine will verify the archive before extraction.
 
 ## 📦 Installation
 
@@ -139,6 +142,14 @@ See [docs/BUILD.md](docs/BUILD.md) for Linux, Windows, and CoreML setup.
 cp phonex.yaml.example phonex.yaml
 phonex serve --config phonex.yaml
 ```
+
+### Environment variables
+
+| Variable | Purpose |
+|----------|---------|
+| `PHONEX_API_KEY` | Bearer token required for all API endpoints |
+| `PHONEX_ADMIN_API_KEY` | Bearer token required for admin endpoints (`/v1/admin/reload`, `/metrics`) |
+| `PHONEX_TRUST_PROXY` | Set to `true` to trust `X-Forwarded-For` / `X-Real-IP` for rate limiting (only behind a trusted proxy) |
 
 ### Docker Compose (with Prometheus + Grafana)
 
@@ -182,6 +193,15 @@ Greedy RNNT Decoder → SentencePiece → Text
 - **Session pool**: Parallel ONNX sessions for concurrent requests.
 
 Read more in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## 🔒 Security
+
+- **API key authentication**: Set `--api-key` (or `PHONEX_API_KEY`) to require `Authorization: Bearer <key>` on all endpoints. Set `--admin-api-key` (or `PHONEX_ADMIN_API_KEY`) to restrict `/v1/admin/reload` and `/metrics` separately.
+- **Rate limiting**: Enable with `--rate-limit-per-minute` to protect against abuse. If running behind a trusted reverse proxy, set `--trust-proxy` (or `PHONEX_TRUST_PROXY`) so rate limiting uses the real client IP from `X-Forwarded-For`.
+- **Path validation**: Model reload (`POST /v1/admin/reload`) validates that paths are absolute and rejects `..` traversal attempts.
+- **gRPC auth**: gRPC endpoints also require the Bearer API key when authentication is enabled.
+
+See [SECURITY.md](SECURITY.md) and [docs/SECURITY.md](docs/SECURITY.md) for full details.
 
 ## 📚 Documentation
 

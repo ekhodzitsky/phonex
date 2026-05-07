@@ -223,7 +223,10 @@ impl ModelInfo {
                         return Some(if dim <= 0 { 512usize } else { dim as usize });
                     }
                 None
-            }).unwrap_or(512)
+            }).unwrap_or_else(|| {
+                tracing::info!("Falling back to default d_model=512");
+                512
+            })
         });
 
         let context_size = config.context_size.unwrap_or_else(|| {
@@ -234,7 +237,10 @@ impl ModelInfo {
                         return Some(if dim <= 0 { 2usize } else { dim as usize });
                     }
                 None
-            }).unwrap_or(2)
+            }).unwrap_or_else(|| {
+                tracing::info!("Falling back to default context_size=2");
+                2
+            })
         });
 
         let vocab_size = config.vocab_size.unwrap_or_else(|| {
@@ -245,7 +251,10 @@ impl ModelInfo {
                         return Some(if dim <= 0 { 2000usize } else { dim as usize });
                     }
                 None
-            }).unwrap_or(2000)
+            }).unwrap_or_else(|| {
+                tracing::info!("Falling back to default vocab_size=2000");
+                2000
+            })
         });
 
         let encoder_inputs = io_names(config.encoder.as_ref().map(|c| c.input_names.clone()), encoder.inputs());

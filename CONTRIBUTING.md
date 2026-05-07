@@ -97,7 +97,8 @@ src/
 2. **Create a branch** (`git checkout -b feature/my-feature`)
 3. **Make your changes** with clear commit messages
 4. **Run tests and clippy** (`cargo test --all-targets && cargo clippy --all-targets --all-features`)
-5. **Open a Pull Request** with a clear description
+5. **Run security checks** (`cargo audit && cargo deny check`) before opening a PR
+6. **Open a Pull Request** with a clear description
 
 ## Reporting bugs
 

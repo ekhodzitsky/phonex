@@ -54,6 +54,8 @@ mod grpc_tests {
             engine,
             info,
             "models/sherpa-onnx-zipformer-thai-2024-06-20".to_string(),
+            100,
+            None,
         );
 
         let (mut health_reporter, health_service) = tonic_health::server::health_reporter();

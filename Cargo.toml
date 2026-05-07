@@ -1,6 +1,6 @@
 [package]
 name = "phonex"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2024"
 description = "Local multilingual STT engine powered by Sherpa-ONNX Zipformer — offline and streaming speech recognition via ONNX Runtime"
 license = "MIT"
@@ -20,6 +20,8 @@ tls = ["server", "dep:axum-server", "dep:rustls-pemfile"]
 coreml = ["ort/coreml"]
 cuda = ["ort/cuda"]
 ffi = ["ort/nnapi"]
+# Enable benchmarks that load real ONNX models (requires model files on disk).
+bench-with-model = []
 
 [dependencies]
 # ONNX Runtime
@@ -130,7 +132,7 @@ polyvoice = { version = "0.5", features = ["onnx"], optional = true }
 [dev-dependencies]
 tempfile = "3"
 tokio-tungstenite = "0.29"
-criterion = { version = "0.8", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 
 [build-dependencies]
 tonic-build = "0.12"

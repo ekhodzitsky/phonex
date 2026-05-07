@@ -209,11 +209,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         health_reporter
             .set_serving::<server::grpc::pb::transcription_service_server::TranscriptionServiceServer<server::grpc::PhonexGrpcService>>()
             .await;
+        let shutdown_grpc = shutdown.clone();
         Some(tokio::spawn(async move {
             tonic::transport::Server::builder()
                 .add_service(health_service)
                 .add_service(grpc_svc.into_server())
-                .serve(grpc_addr)
+                .serve_with_shutdown(grpc_addr, async move {
+                    shutdown_grpc.cancelled().await;
+                })
                 .await
         }))
     } else {

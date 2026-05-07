@@ -209,7 +209,7 @@ async fn handle_v1_stream(mut socket: WebSocket, state: Arc<AppState>) {
                             };
                             if socket
                                 .send(Message::Text(
-                                    serde_json::to_string(&reply).unwrap().into(),
+                                    serde_json::to_string(&reply).unwrap_or_else(|_| "{}".into()).into(),
                                 ))
                                 .await
                                 .is_err()
@@ -294,7 +294,7 @@ async fn flush_and_send_final(socket: &mut WebSocket, pipeline: &mut WsPipeline)
                 words: vec![],
             };
             let _ = socket
-                .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
+                .send(Message::Text(serde_json::to_string(&msg).unwrap_or_else(|_| "{}".into()).into()))
                 .await;
         }
         Err(e) => {
@@ -399,7 +399,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                                         }
                                     };
                                     if socket
-                                        .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
+                                        .send(Message::Text(serde_json::to_string(&msg).unwrap_or_else(|_| "{}".into()).into()))
                                         .await
                                         .is_err()
                                     {
@@ -436,7 +436,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                                 words: seg.words.to_vec(),
                             };
                             let _ = socket
-                                .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
+                                .send(Message::Text(serde_json::to_string(&msg).unwrap_or_else(|_| "{}".into()).into()))
                                 .await;
                         }
                         flushed = true;
@@ -471,7 +471,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                                     };
                                     let _ = socket
                                         .send(Message::Text(
-                                            serde_json::to_string(&msg).unwrap().into(),
+                                            serde_json::to_string(&msg).unwrap_or_else(|_| "{}".into()).into(),
                                         ))
                                         .await;
                                 }
@@ -498,7 +498,7 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
                 words: seg.words.to_vec(),
             };
             let _ = socket
-                .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
+                .send(Message::Text(serde_json::to_string(&msg).unwrap_or_else(|_| "{}".into()).into()))
                 .await;
         }
     }
@@ -515,7 +515,7 @@ async fn send_ready_message(
         supported_rates: crate::server::SUPPORTED_RATES.to_vec(),
     };
     socket
-        .send(Message::Text(serde_json::to_string(&ready).unwrap().into()))
+        .send(Message::Text(serde_json::to_string(&ready).unwrap_or_else(|_| "{}".into()).into()))
         .await
 }
 
@@ -531,6 +531,6 @@ async fn send_error(
         retry_after_ms,
     };
     socket
-        .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
+        .send(Message::Text(serde_json::to_string(&msg).unwrap_or_else(|_| "{}".into()).into()))
         .await
 }

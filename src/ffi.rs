@@ -13,7 +13,10 @@
 
 use std::ffi::{CStr, CString, c_char};
 use std::ptr;
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicBool, Ordering};
+
+use dashmap::DashSet;
 
 use crate::inference::Engine;
 use crate::model_config::ModelInfo;
@@ -77,7 +80,9 @@ pub unsafe extern "C" fn phonex_engine_new_with_pool_size(
                 engine,
                 disposed: AtomicBool::new(false),
             });
-            Box::into_raw(handle)
+            let raw = Box::into_raw(handle);
+            LIVE_ENGINES.insert(raw as usize);
+            raw
         }
         Err(e) => {
             tracing::error!("phonex_engine_new_with_pool_size: failed to load engine: {e}");
@@ -156,12 +161,15 @@ pub unsafe extern "C" fn phonex_string_free(s: *mut c_char) {
 /// `engine` must be a pointer returned by `phonex_engine_new` and not yet freed,
 /// or `NULL` (in which case this is a no-op).
 #[unsafe(no_mangle)]
+static LIVE_ENGINES: LazyLock<DashSet<usize>> = LazyLock::new(DashSet::new);
+static LIVE_STREAMS: LazyLock<DashSet<usize>> = LazyLock::new(DashSet::new);
+
 pub unsafe extern "C" fn phonex_engine_free(engine: *mut PhonexEngine) {
     if engine.is_null() {
         return;
     }
-    let disposed = unsafe { std::ptr::addr_of_mut!((*engine).disposed) };
-    if unsafe { (*disposed).swap(true, Ordering::AcqRel) } {
+    let key = engine as usize;
+    if !LIVE_ENGINES.remove(&key).is_some() {
         return;
     }
     let _ = unsafe { Box::from_raw(engine) };
@@ -221,7 +229,9 @@ pub unsafe extern "C" fn phonex_stream_new(
                 pipeline,
                 disposed: AtomicBool::new(false),
             });
-            Box::into_raw(handle)
+            let raw = Box::into_raw(handle);
+            LIVE_STREAMS.insert(raw as usize);
+            raw
         }
         Err(e) => {
             tracing::error!("phonex_stream_new: failed to create streaming pipeline: {e}");
@@ -373,11 +383,24 @@ pub unsafe extern "C" fn phonex_stream_free(stream: *mut PhonexStream) {
     if stream.is_null() {
         return;
     }
-    let disposed = unsafe { std::ptr::addr_of_mut!((*stream).disposed) };
-    if unsafe { (*disposed).swap(true, Ordering::AcqRel) } {
+    let key = stream as usize;
+    if !LIVE_STREAMS.remove(&key).is_some() {
         return;
     }
     let _ = unsafe { Box::from_raw(stream) };
+}
+
+#[cfg(test)]
+impl PhonexEngine {
+    fn test_new(engine: Engine) -> *mut Self {
+        let handle = Box::new(PhonexEngine {
+            engine,
+            disposed: AtomicBool::new(false),
+        });
+        let raw = Box::into_raw(handle);
+        LIVE_ENGINES.insert(raw as usize);
+        raw
+    }
 }
 
 #[cfg(test)]
@@ -410,4 +433,28 @@ mod tests {
     fn test_stream_free_null() {
         unsafe { phonex_stream_free(ptr::null_mut()) };
     }
+
+    #[test]
+    fn test_engine_free_double_free_is_safe() {
+        let ptr = PhonexEngine::test_new(crate::inference::Engine::test_stub());
+        // First free should deallocate
+        unsafe { phonex_engine_free(ptr) };
+        // Second free must be a no-op (global set prevents double-free)
+        unsafe { phonex_engine_free(ptr) };
+    }
+
+    #[test]
+    fn test_transcribe_file_on_disposed_engine_returns_null() {
+        let ptr = PhonexEngine::test_new(crate::inference::Engine::test_stub());
+        // Mark as disposed manually (simulates already-freed engine reused by caller)
+        unsafe {
+            let disposed = std::ptr::addr_of_mut!((*ptr).disposed);
+            (*disposed).store(true, Ordering::Release);
+        }
+        let wav_path = CString::new("dummy.wav").unwrap();
+        let result = unsafe { phonex_transcribe_file(ptr, wav_path.as_ptr()) };
+        assert!(result.is_null());
+        unsafe { phonex_engine_free(ptr) };
+    }
 }
+

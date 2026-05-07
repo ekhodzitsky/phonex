@@ -1,8 +1,22 @@
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+//! Streaming encoder latency benchmark with real ONNX models.
+//!
+//! # Real-Time Factor (RTF)
+//!
+//! Each benchmark iteration processes 15 encoder chunks representing
+//! 5 seconds of audio (500 frames @ 10 ms frame shift).
+//!
+//! ```text
+//! RTF = measured_latency (s) / 5.0 (s)
+//! ```
+//!
+//! Target: RTF < 0.1 (process 1 s of audio in < 100 ms).
+
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 use ndarray::Array3;
 use phonex::streaming_encoder::StreamingEncoder;
 
 const STREAMING_MODEL_DIR: &str = "models/sherpa-onnx-streaming-zipformer-en-2023-06-21";
+const AUDIO_DURATION_S: f64 = 5.0;
 
 /// Build a 5-second audio clip into precomputed encoder chunks.
 ///
@@ -29,10 +43,12 @@ fn bench_streaming_encoder(c: &mut Criterion) {
     // Precompute chunks once using a temporary encoder (values don't matter for timing)
     let probe = StreamingEncoder::new(encoder_path).expect("failed to load probe encoder");
     let chunks = make_chunks(&probe);
+    let n_chunks = chunks.len() as u64;
 
     // ---- CPU ----
     let mut group = c.benchmark_group("streaming_encoder");
     group.sample_size(20);
+    group.throughput(Throughput::Elements(n_chunks));
     group.bench_function("cpu", |b| {
         b.iter_batched(
             || {
@@ -50,6 +66,7 @@ fn bench_streaming_encoder(c: &mut Criterion) {
     });
 
     // ---- CoreML (best available) ----
+    group.throughput(Throughput::Elements(n_chunks));
     group.bench_function("coreml", |b| {
         b.iter_batched(
             || {
@@ -67,6 +84,12 @@ fn bench_streaming_encoder(c: &mut Criterion) {
     });
 
     group.finish();
+
+    eprintln!(
+        " audio_duration = {:.1} s  |  RTF target < 0.1  =>  latency target < {:.0} ms",
+        AUDIO_DURATION_S,
+        AUDIO_DURATION_S * 1000.0 * 0.1
+    );
 }
 
 criterion_group!(benches, bench_streaming_encoder);

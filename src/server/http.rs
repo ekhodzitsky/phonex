@@ -153,7 +153,7 @@ impl Drop for MetricsGuard<'_> {
         (status = 200, description = "Service is healthy", body = HealthResponse),
     )
 )]
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(level = "trace", skip(state))]
 pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     let _guard = MetricsGuard {
         registry: &state.metrics_registry,
@@ -183,7 +183,7 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> 
         (status = 200, description = "Model information", body = ModelInfoResponse),
     )
 )]
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(level = "trace", skip(state))]
 pub async fn models(State(state): State<Arc<AppState>>) -> Json<ModelInfoResponse> {
     let _guard = MetricsGuard {
         registry: &state.metrics_registry,
@@ -475,7 +475,7 @@ pub async fn transcribe_stream(
     let engine = state.engine.read().await.clone();
     let guard = checkout_triplet(&engine).await?;
 
-    let (tx, rx) = tokio::sync::mpsc::channel::<Result<crate::inference::TranscriptSegment, String>>(16);
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<crate::inference::TranscriptSegment, String>>(256);
 
     let engine = engine.clone();
     let cancel = state.shutdown.clone();
@@ -490,7 +490,7 @@ pub async fn transcribe_stream(
                 match crate::inference::audio::resample(&samples_f32, client_rate, crate::inference::TARGET_SAMPLE_RATE) {
                     Ok(s) => s,
                     Err(e) => {
-                        let _ = tx.blocking_send(Err(format!("{e}")));
+                        let _ = tx.try_send(Err(format!("{e}")));
                         return;
                     }
                 }
@@ -499,7 +499,7 @@ pub async fn transcribe_stream(
             let mut stream_state = match engine.create_state(false) {
                 Ok(s) => s,
                 Err(e) => {
-                    let _ = tx.blocking_send(Err(format!("{e}")));
+                    let _ = tx.try_send(Err(format!("{e}")));
                     return;
                 }
             };
@@ -512,13 +512,13 @@ pub async fn transcribe_stream(
                 match engine.process_chunk(chunk, &mut stream_state, &mut *guard) {
                     Ok(segs) => {
                         for seg in segs {
-                            if tx.blocking_send(Ok(seg)).is_err() {
+                            if tx.try_send(Ok(seg)).is_err() {
                                 return;
                             }
                         }
                     }
                     Err(e) => {
-                        let _ = tx.blocking_send(Err(format!("{e}")));
+                        let _ = tx.try_send(Err(format!("{e}")));
                         return;
                     }
                 }
@@ -526,7 +526,7 @@ pub async fn transcribe_stream(
 
             if !cancel.is_cancelled()
                 && let Some(seg) = engine.flush_state(&mut stream_state, &mut *guard) {
-                    let _ = tx.blocking_send(Ok(seg));
+                    let _ = tx.try_send(Ok(seg));
                 }
         }));
 
@@ -662,4 +662,36 @@ pub async fn reload(
         model: model_info.model_id.clone(),
         version: env!("CARGO_PKG_VERSION").into(),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_validate_model_dir_rejects_relative() {
+        let result = validate_model_dir("models/foo");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_model_dir_rejects_parent_dir() {
+        let result = validate_model_dir("/etc/../foo");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_model_dir_rejects_nonexistent() {
+        let result = validate_model_dir("/nonexistent/path/12345");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_model_dir_accepts_absolute() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+        let result = validate_model_dir(path);
+        assert!(result.is_ok());
+    }
 }
