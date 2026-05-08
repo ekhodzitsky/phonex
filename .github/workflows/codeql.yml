@@ -1,0 +1,54 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 9 * * 1'
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze Rust
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install ONNX Runtime
+        run: |
+          curl -fsSL https://github.com/microsoft/onnxruntime/releases/download/v1.25.1/onnxruntime-linux-x64-1.25.1.tgz -o onnxruntime.tgz
+          sudo tar -xzf onnxruntime.tgz -C /opt
+          sudo mv /opt/onnxruntime-linux-x64-1.25.1 /opt/onnxruntime
+          echo "ORT_LIB_PATH=/opt/onnxruntime/lib" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/opt/onnxruntime/lib" >> $GITHUB_ENV
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: rust
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+        env:
+          ORT_LIB_PATH: /opt/onnxruntime/lib
+          ORT_PREFER_DYNAMIC_LINK: 1
+          LD_LIBRARY_PATH: /opt/onnxruntime/lib
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:rust"
