@@ -51,7 +51,7 @@ jobs:
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
       - name: Install ONNX Runtime (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -78,7 +78,7 @@ jobs:
           curl -fsSL https://github.com/microsoft/onnxruntime/releases/download/v1.25.1/${{ matrix.onnx_dir }}.zip -o onnxruntime.zip
           unzip -q onnxruntime.zip
           mv ${{ matrix.onnx_dir }} /c/onnxruntime
-          echo "ORT_LIB_PATH=/c/onnxruntime/lib" >> $GITHUB_ENV
+          echo "ORT_LIB_PATH=C:/onnxruntime/lib" >> $GITHUB_ENV
           echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
 
       - name: Build release binaries
