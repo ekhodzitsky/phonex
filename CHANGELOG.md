@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **CodeQL static analysis** — new GitHub Actions workflow (`codeql.yml`) runs weekly and on every push/PR.
+- **SHA-256 model manifest** — all 18 model entries in `models/manifest.json` now have verified SHA-256 hashes for reproducible downloads.
+
+### Fixed
+- `shutdown_signal()` now compiles on Windows (`#[cfg(windows)]` Ctrl-C fallback).
+
 ## [0.2.5] - 2026-05-07
 
 ### Security
