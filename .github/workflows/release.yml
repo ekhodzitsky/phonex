@@ -81,6 +81,10 @@ jobs:
           echo "ORT_LIB_PATH=C:/onnxruntime/lib" >> $GITHUB_ENV
           echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
 
+      - name: Install zip (Windows)
+        if: matrix.os == 'windows-latest'
+        run: choco install zip -y
+
       - name: Build release binaries
         run: |
           cargo build --release --target ${{ matrix.target }} --bin phonex --bin server --bin streaming
