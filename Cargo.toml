@@ -61,10 +61,10 @@ sha2 = "0.11"
 
 # Archive extraction for model auto-download
 tar = "0.4"
-bzip2 = "0.5"
+bzip2 = "0.6"
 
 # Progress bar for CLI downloads
-indicatif = "0.17"
+indicatif = "0.18"
 
 # Request ID generation for tracing
 uuid = { version = "1", features = ["v4"] }
@@ -81,9 +81,9 @@ rubato = "2.0"
 tokio-stream = { version = "0.1", optional = true }
 
 # gRPC
-tonic = { version = "0.12", optional = true }
-tonic-health = { version = "0.12", optional = true }
-prost = { version = "0.13", optional = true }
+tonic = { version = "0.14", optional = true }
+tonic-health = { version = "0.14", optional = true }
+prost = { version = "0.14", optional = true }
 async-stream = { version = "0.3", optional = true }
 
 # OpenAPI generation for axum
@@ -118,7 +118,7 @@ sentencepiece = "0.13"
 serde_yaml = "0.9"
 
 # TLS for HTTP server
-axum-server = { version = "0.7", features = ["tls-rustls"], optional = true }
+axum-server = { version = "0.8", features = ["tls-rustls"], optional = true }
 rustls-pemfile = { version = "2", optional = true }
 
 # N-dimensional arrays
@@ -131,7 +131,7 @@ realfft = "3"
 polyvoice = { version = "0.5", features = ["onnx"], optional = true }
 
 # Python bindings
-pyo3 = { version = "0.24", features = ["extension-module", "abi3-py39"], optional = true }
+pyo3 = { version = "0.28", features = ["extension-module", "abi3-py39"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"
@@ -139,7 +139,7 @@ tokio-tungstenite = "0.29"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 
 [build-dependencies]
-tonic-build = "0.12"
+tonic-build = "0.14"
 
 [profile.release]
 lto = true
